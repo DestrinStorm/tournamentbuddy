@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+{% autoescape true %}
+<html>
+  <head>
+    <link type="text/css" rel="stylesheet" href="/stylesheets/main.css" />
+  </head>
+  <body>
+    <h1>{{ tournament.system }} Tournament {{ tournament.name }}</h1>
+    
+    <a href="/">Back to Tournament list</a>
+    <a href="{{ url|safe }}">{{ url_linktext }}</a>
+
+  </body>
+</html>
+{% endautoescape %}

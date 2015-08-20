@@ -5,11 +5,14 @@ api_version: 1
 threadsafe: true
 
 handlers:
-- url: .*
+- url: /stylesheets
+  static_dir: stylesheets
+  
+- url: /.*
   script: tbuddy.app
   
 libraries:
 - name: webapp2
   version: latest
 - name: jinja2
-  version: latest
+  version: 2.6
