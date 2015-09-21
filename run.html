@@ -6,8 +6,72 @@
   </head>
   <body>
     <h1>{{ tournament.system }} Tournament {{ tournament.name }}</h1>
-    
-    <a href="/">Back to Tournament list</a>
+    <h2>Round: {{tournament.currentround}}</h2>
+    <table>
+        <tr>
+            <th>Table</th>
+            <th>Player A</th>
+            <th>Player B</th>
+            <th>Terrain</th>
+        </tr>
+        {% for table in tables %}
+        <tr>
+            <td>{{table.number}}</td>
+            {% for tableplayer in table.players %}
+            <td>{{tableplayer}}</td>
+            {% endfor %}
+            <td>{{table.terrain}}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <h2>Players: {{ tournament|getplayercount }}</h2>
+    <table>
+        <tr>
+            <th>Player</th>
+            <th>Faction</th>
+            <th>Score</th>
+            <th>SoS</th>
+            <th>CP</th>
+            <th>PC Destroyed</th>
+        </tr>
+        {% for player in players %}
+        <tr>
+            <td>{{player.name}}</td>
+            <td>{{player.faction}}</td>
+            <td align="center">{{player.score}}</td>
+            <td align="center">{{player.sos}}</td>
+            <td align="center">{{player.cp}}</td>
+            <td align="center">{{player.pcdest}}</td>
+            <td><a href="dropplayer?PKEY={{ player.key.urlsafe() }}&TKEY={{ tournament.key.urlsafe() }}">drop</td>
+        </tr>
+        {% endfor %}
+      </table>
+      <br>
+      <input type="button" onclick="location.href='/pair?TKEY={{ tournament.key.urlsafe() }}';" value="Perform pairings for round {{tournament.currentround + 1}}"/>
+    <form action="/addplayer?" method="get">
+    <input type="hidden" name="TKEY" value="{{ tournament.key.urlsafe() }}">
+    <fieldset>
+    <legend>Add new players:</legend>
+      Name:<input type="text" name="name" required>
+      Faction:
+            <select name="faction">
+                <option value="Cryx">Cryx</option>
+                <option value="Cygnar">Cygnar</option>
+                <option value="Khador">Khador</option>
+                <option value="Protectorate of Menoth">Protectorate of Menoth</option>
+                <option value="Retribution of Scyrah">Retribution of Scyrah</option>
+                <option value="Convergence of Cyriss">Convergence of Cyriss</option>
+                <option value="Mercenaries">Mercenaries</option>
+                <option value="Circle Orboros">Circle Orboros</option>
+                <option value="Legion of Everblight">Legion of Everblight</option>
+                <option value="Skorne">Skorne</option>
+                <option value="Trolls">Trollbloods</option>
+                <option value="Minions">Minions</option>
+            </select>
+      <input type="submit" value="Add">
+        </fieldset>
+    </form>
+    <a href="/">Back to Tournament list</a> | 
     <a href="{{ url|safe }}">{{ url_linktext }}</a>
 
   </body>

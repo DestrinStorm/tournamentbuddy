@@ -5,9 +5,9 @@
     <link type="text/css" rel="stylesheet" href="/stylesheets/main.css" />
   </head>
   <body>
+    <h1>Welcome to Tournament Buddy</h1>
+    <h2>Tournaments owned by you:</h2>
     <table>
-        <h1>Welcome to Tournament Buddy</h1>
-        <h2>Tournaments owned by you:</h2>
         <tr>
             <th>Name</th>
             <th>System</th>
@@ -20,7 +20,7 @@
             <td><a href="run?TKEY={{ tournament.key.urlsafe() }}">{{ tournament.name }}</a></td>
             <td>{{ tournament.system }}</td>
             <td>{{ tournament.date|formatdatetime }}</td>
-            <td>{{ tournament.playercount }}</td>
+            <td>{{ tournament|getplayercount }}</td>
             <td>{{ tournament.currentround }}</td>
             <td><a href="del?TKEY={{ tournament.key.urlsafe() }}">Delete</td>
         </tr>
