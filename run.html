@@ -6,24 +6,47 @@
   </head>
   <body>
     <h1>{{ tournament.system }} Tournament {{ tournament.name }}</h1>
+    <form action="/changepoints?" method="get">
+    <input type="hidden" name="TKEY" value="{{ tournament.key.urlsafe() }}">
+    <h2>Point Size:
+        {% if tournament.currentround == 0 %}
+        <input type="number" name="points" style="width: 40px;" value="{{tournament.pointsize}}"/>
+        <input type="submit" value="Change"></h2>
+        {% else %}
+        {{tournament.pointsize}}
+        {% endif %}
+        </form>
     <h2>Round: {{tournament.currentround}}</h2>
+    {% if tournament.currentround > 0 %}
+        <h2>Round Length: {{thisround.length}} mins</h2>
+        <h2>Scenario: {{thisround.scenario}}</h2>
     <table>
         <tr>
             <th>Table</th>
             <th>Player A</th>
             <th>Player B</th>
             <th>Terrain</th>
+            <th>Finished?</th>
         </tr>
         {% for table in tables %}
         <tr>
             <td>{{table.number}}</td>
-            {% for tableplayer in table.players %}
-            <td>{{tableplayer}}</td>
-            {% endfor %}
+            {% if table.number == 0 %}
+                <td>{{table.players[0].get().name}}</td><td>Bye</td>
+            {% else %}
+                {% for tableplayer in table.players %}
+                <td>{{tableplayer.get().name}}</td>
+                {% endfor %}
+            {% endif %}
             <td>{{table.terrain}}</td>
+            <td>{{table.finished}}</td>
+            {% if table.number > 0 %}
+            <td><a href="results?TABKEY={{ table.key.urlsafe() }}">results</td>
+            {% endif %}
         </tr>
         {% endfor %}
     </table>
+    {% endif %}
     <h2>Players: {{ tournament|getplayercount }}</h2>
     <table>
         <tr>
@@ -47,7 +70,12 @@
         {% endfor %}
       </table>
       <br>
-      <input type="button" onclick="location.href='/pair?TKEY={{ tournament.key.urlsafe() }}';" value="Perform pairings for round {{tournament.currentround + 1}}"/>
+    {% if tournament.currentround == 0%}
+    <input type="button" onclick="location.href='/pair?TKEY={{ tournament.key.urlsafe() }}';" value="Perform pairings for round {{tournament.currentround + 1}}"/>
+    {% elif thisround|isFinished %}
+    <input type="button" onclick="location.href='/pair?TKEY={{ tournament.key.urlsafe() }}';" value="Perform pairings for round {{tournament.currentround + 1}}"/>
+    {% endif %}
+    {% if tournament.currentround == 0 %}
     <form action="/addplayer?" method="get">
     <input type="hidden" name="TKEY" value="{{ tournament.key.urlsafe() }}">
     <fieldset>
@@ -71,9 +99,10 @@
       <input type="submit" value="Add">
         </fieldset>
     </form>
+    {% endif %}
+    <br>
     <a href="/">Back to Tournament list</a> | 
     <a href="{{ url|safe }}">{{ url_linktext }}</a>
-
   </body>
 </html>
 {% endautoescape %}

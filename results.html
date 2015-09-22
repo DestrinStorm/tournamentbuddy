@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+{% autoescape true %}
+<html>
+  <head>
+    <link type="text/css" rel="stylesheet" href="/stylesheets/main.css" />
+  </head>
+  <body>
+    <h1>{{ tournament.system }} Tournament {{ tournament.name }}</h1>
+    <h2>Table: {{table.number}}</h2>
+    <form action="/resultssubmit?" method="get">
+    <input type="hidden" name="TABKEY" value="{{ table.key.urlsafe() }}">
+    <table>
+        <tr>
+            <th>Player</th>
+            <th>Win?</th>
+            <th>CPs</th>
+            <th>Points Destroyed</th>
+        </tr>
+        {% for player in players %}
+        <tr>
+            <td>{{player.name}}</td>
+            <td align="center"><input type="radio" name="win" value="{{player.key.urlsafe()}}"{% if player.scorelist[thisround.number-1] == 1 %}checked{% endif %}></td>
+            <td align="center"><input type="number" name="cps" style="width: 40px;" value="{{player.cplist[thisround.number-1]}}" required/></td>
+            <td align="center"><input type="number" name="pcdest" style="width: 40px;" value="{{player.pcdestlist[thisround.number-1]}}" required/></td>
+        </tr>
+        {% endfor %}
+    </table>
+    <br>
+    <input type="submit" value="Submit Scores">
+    </form>
+    <br>
+    <a href="/">Back to Tournament list</a> | 
+    <a href="{{ url|safe }}">{{ url_linktext }}</a>
+  </body>
+</html>
+{% endautoescape %}

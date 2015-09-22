@@ -2,6 +2,7 @@ import os
 import cgi
 import urllib
 import random
+import math
 from google.appengine.api import users
 from google.appengine.ext import ndb
 import jinja2
@@ -21,12 +22,26 @@ def getplayercount(tournament):
     numplayers = len(Player.query(ancestor=tournament.key).fetch())
     return numplayers
 
+def isFinished(thisround):
+    tables = Table.query(ancestor=thisround.key).fetch()
+    finished = True
+    for table in tables:
+        logging.info(finished)
+        if not(table.finished):
+            finished = False
+    logging.info(finished)
+    return finished
+
 JINJA_ENVIRONMENT.filters['formatdatetime']=formatdatetime
 JINJA_ENVIRONMENT.filters['getplayercount']=getplayercount
+JINJA_ENVIRONMENT.filters['isFinished']=isFinished
 
 def user_key(user_id):
     """Constructs a Datastore key for a user entity."""
     return ndb.Key('User', user_id)
+
+ROUND_LENGTHS = {15:30,25:50,35:70,50:100,75:120,100:150,150:200,200:250}
+SCENARIOS = ['Destruction','Two Fronts','Close Quarters','Fire Support','Incoming','Incursion','Outflank','Recon']
 
 #START NDB data models
 class Tournament(ndb.Model):
@@ -34,6 +49,7 @@ class Tournament(ndb.Model):
     name = ndb.StringProperty(indexed=False)
     date = ndb.DateTimeProperty(auto_now_add=True)
     system = ndb.StringProperty(indexed=False)
+    pointsize = ndb.IntegerProperty(default=50)
     currentround = ndb.IntegerProperty(indexed=False,default=0)
 
 class Round(ndb.Model):
@@ -51,12 +67,15 @@ class Table(ndb.Model):
     
 class Player(ndb.Model):
     """A given player within the tournament"""
-    name = ndb.StringProperty(indexed=False)
+    name = ndb.StringProperty()
     faction = ndb.StringProperty(indexed=False,choices=['Cryx','Cygnar','Khador','Protectorate of Menoth','Retribution of Scyrah','Convergence of Cyriss','Mercenaries','Circle Orboros','Legion of Everblight','Skorne','Trollbloods','Minions'])
-    score = ndb.IntegerProperty(default=0)
+    scorelist = ndb.IntegerProperty(repeated=True)
+    cplist = ndb.IntegerProperty(repeated=True)
+    pcdestlist = ndb.IntegerProperty(repeated=True)
+    score = ndb.ComputedProperty(lambda self: sum(self.scorelist))
+    cp = ndb.ComputedProperty(lambda self: sum(self.cplist))
+    pcdest = ndb.ComputedProperty(lambda self: sum(self.pcdestlist))
     sos = ndb.IntegerProperty(default=0)
-    cp = ndb.IntegerProperty(default=0)
-    pcdest = ndb.IntegerProperty(default=0)
 #END NDB data models
 
 class MainPage(webapp2.RequestHandler):
@@ -67,7 +86,7 @@ class MainPage(webapp2.RequestHandler):
             url = users.create_logout_url(self.request.uri)
             url_linktext = 'Logout'
             #get list of tournaments owned by this user
-            tournaments = Tournament.query(ancestor=user_key(identity)).fetch()
+            tournaments = Tournament.query(ancestor=user_key(identity)).order(-Tournament.date).fetch()
             template_values = {
                 'user': user,
                 'tournaments': tournaments,
@@ -98,7 +117,7 @@ class DelTournament(webapp2.RequestHandler):
             identity=users.get_current_user().user_id()
             #Check we're logged in as the owner to prevent remote deletions
             if identity == deletekey.parent().id():
-                deletekey.delete()
+                ndb.delete_multi(ndb.Query(ancestor=deletekey).iter(keys_only = True))
         self.redirect('/')
         
 class RunTournament(webapp2.RequestHandler):
@@ -112,17 +131,17 @@ class RunTournament(webapp2.RequestHandler):
             tournamentkey = ndb.Key(urlsafe=tournamentkeyurlstr)
             tournament = tournamentkey.get()
             tables = []
-            players = Player.query(ancestor=tournament.key).fetch()
+            thisround = []
+            players = Player.query(ancestor=tournament.key).order(-Player.score, -Player.sos, -Player.cp, -Player.pcdest, Player.name).fetch()
             if tournament.currentround > 0:
                 thisround = Round.query(Round.number == tournament.currentround).get()
-                tables = Table.query(ancestor=thisround.key).fetch()
-                logging.info(tables)
-                logging.info(players)
+                tables = Table.query(ancestor=thisround.key).order(Table.number).fetch()
             template_values = {
                 'user': user,
                 'tournament': tournament,
                 'players':players,
                 'tables':tables,
+                'thisround':thisround,
                 'url': url,
                 'url_linktext': url_linktext,
                 }
@@ -138,9 +157,8 @@ class DoPairings(webapp2.RequestHandler):
         #Generate the new round container
         thisround = Round(parent=tournamentkey)
         thisround.number = tournament.currentround + 1
-        """TODO
-        thisround.length = 
-        thisround.scenario = """
+        thisround.length = ROUND_LENGTHS[tournament.pointsize] + random.choice([5,10,15,-5,-10,-15])
+        thisround.scenario = random.choice(SCENARIOS)
         roundkey = thisround.put()
         #Initial random pairing?
         if thisround.number == 1:
@@ -160,10 +178,15 @@ class DoPairings(webapp2.RequestHandler):
                 table.put()
             if playerlist:
                 #There is a bye
+                byeplayer = playerlist[0]
                 table = Table(parent=roundkey)
                 table.number = 0
-                table.players = [playerlist[0].key]
-                """TODO: player score modifications"""
+                table.players = [byeplayer.key]
+                #Grant the player bye scores for round 1
+                byeplayer.scorelist.append(1)
+                byeplayer.cplist.append(3)
+                byeplayer.pcdestlist.append(int(math.ceil(tournament.pointsize/2.0)))
+                byeplayer.put()
                 table.finished = True
                 table.put()
         else:
@@ -171,8 +194,83 @@ class DoPairings(webapp2.RequestHandler):
         tournament.currentround = thisround.number
         tournament.put()
         self.redirect('/run?TKEY='+tournamentkeyurlstr)    
-            
-            
+
+class Results(webapp2.RequestHandler):
+    def get(self):
+        user = users.get_current_user()    
+        if user:
+            identity = users.get_current_user().user_id()
+            url = users.create_logout_url(self.request.uri)
+            url_linktext = 'Logout'
+            tablekeyurlstr = self.request.get('TABKEY')
+            tablekey = ndb.Key(urlsafe=tablekeyurlstr)
+            table = tablekey.get()
+            thisround = tablekey.parent().get()
+            tournament = thisround.key.parent().get()
+            players = []
+            for player in table.players:
+                players.append(player.get())
+            template_values = {
+                'user': user,
+                'tournament': tournament,
+                'thisround': thisround,
+                'players':players,
+                'table':table,
+                'url': url,
+                'url_linktext': url_linktext,
+                }
+            template = JINJA_ENVIRONMENT.get_template('results.html')
+            self.response.write(template.render(template_values))            
+
+class ResultsSubmit(webapp2.RequestHandler):
+    def get(self):
+        if users.get_current_user():
+            tablekeyurlstr = self.request.get('TABKEY')
+            table = ndb.Key(urlsafe=tablekeyurlstr).get()
+            thisround = table.key.parent().get()
+            logging.info(thisround.number)
+            #Add in player scores
+            winnerkeyurlstr = self.request.get('win')        
+            cps = self.request.get_all('cps')
+            pcdest = self.request.get_all('pcdest')
+            players = []
+            for player in table.players:
+                players.append(player.get())
+            for x in range(2): 
+                if len(players[x].scorelist) == thisround.number:
+                    if players[x].key.urlsafe() == winnerkeyurlstr:
+                        players[x].scorelist[thisround.number-1] = 1
+                    else:
+                        players[x].scorelist[thisround.number-1] = 0
+                    players[x].cplist[thisround.number-1] = (int(cps[x]))
+                    players[x].pcdestlist[thisround.number-1] = (int(pcdest[x]))
+                else:
+                    if players[x].key.urlsafe() == winnerkeyurlstr:
+                        players[x].scorelist.append(1)
+                    else:
+                        players[x].scorelist.append(0)
+                    players[x].cplist.append(int(cps[x]))
+                    players[x].pcdestlist.append(int(pcdest[x]))
+                #also sort out SOS
+                players[x].put()
+            #Mark the table as finished
+            table.finished = True
+            table.put()
+            tournamentkeyurlstr = table.key.parent().parent().urlsafe()
+            self.redirect('/run?TKEY='+tournamentkeyurlstr)
+        
+class ChangePoints(webapp2.RequestHandler):
+    def get(self):
+        if users.get_current_user():
+            identity=users.get_current_user().user_id()
+            tournamentkeyurlstr = self.request.get('TKEY')
+            tournamentkey = ndb.Key(urlsafe=tournamentkeyurlstr)
+            tournament = tournamentkey.get()
+            newpoints = int(self.request.get('points'))
+            tournament.pointsize = newpoints
+            tournament.put()
+        self.redirect('/run?TKEY='+tournamentkeyurlstr)
+        
 class AddPlayer(webapp2.RequestHandler):
     def get(self):
         if users.get_current_user():
@@ -204,4 +302,7 @@ app = webapp2.WSGIApplication([
     ('/pair', DoPairings),
     ('/addplayer', AddPlayer),
     ('/dropplayer', DropPlayer),
+    ('/results', Results),
+    ('/resultssubmit', ResultsSubmit),
+    ('/changepoints', ChangePoints),
 ], debug=True)
