@@ -3,6 +3,7 @@ import cgi
 import urllib
 import random
 import math
+import pypair
 from google.appengine.api import users
 from google.appengine.ext import ndb
 import jinja2
@@ -190,7 +191,48 @@ class DoPairings(webapp2.RequestHandler):
                 table.finished = True
                 table.put()
         else:
-            logging.info("TODO: rounds beyond the first")
+            #Rounds beyond the first
+            #a range = currentround gives us all possible score levels to iterate on
+            tablenumber = 0
+            for y in reversed(range(thisround.number):
+                #find all players with y as their score
+                scorelevelplayers = []
+                for player in playerlist:
+                    if player.score == y:
+                        scorelevelplayers.append(player)
+                    #pick a random player from the list, then remove them
+                    playerA = random.choice(scorelevelplayers)
+                    scorelevelplayers.remove(playerA)
+                    #and their opponent = but we need to make sure they haven't played before
+                    #grab all the times playerA has played
+                    qry = Table.query(Table.players == playerA.key)
+                    #pull out all player keys and put in a set to remove duplicates
+                    opponentsOfA = set(qry.fetch())
+                    #delete playerA
+                    opponentsOfA.remove(playerA.key)
+                    #cut down the potential opponent list
+                    scorelevelminusopponents = scorelevelplayers
+                    for player in scorelevelminusopponents:
+                        if player.key in opponentsOfA:
+                            scorelevelminusopponents.remove(player)
+                    playerB = random.choice(scorelevelminusopponents)
+                    scorelevelplayers.remove(playerB)
+                    #what table should this be?  
+                    table = Table(parent=roundkey)
+                    table.number = tablenumber + 1
+                    table.players = [playerA.key,playerB.key]
+                    """TODO
+                    table.terrain = """
+                    table.put()
+                if scorelevelplayers:
+                #someone is getting paired down
+                    lowerscorelevelplayers = []
+                    for player in playerlist:
+                        if player.score == y-1:
+                            lowerscorelevelplayers.append(player)
+                    #pick a random player from the list, then remove them
+            if playerlist:
+                #There is a bye
         tournament.currentround = thisround.number
         tournament.put()
         self.redirect('/run?TKEY='+tournamentkeyurlstr)    
