@@ -7,6 +7,7 @@
   <body>
     <h1>Welcome to Tournament Buddy</h1>
     <h2>Tournaments owned by you:</h2>
+    {% if tournaments %}
     <table>
         <tr>
             <th>Name</th>
@@ -26,6 +27,10 @@
         </tr>
     {% endfor %}
     </table>
+        {% else %}
+        None!  Better create one <br>
+        {% endif %}
+
     <br>
     <form action="/new" method="get">
         <fieldset>

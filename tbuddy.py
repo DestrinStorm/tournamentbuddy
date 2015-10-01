@@ -1,3 +1,4 @@
+import networkx
 import os
 import cgi
 import urllib
@@ -190,11 +191,11 @@ class DoPairings(webapp2.RequestHandler):
                 byeplayer.put()
                 table.finished = True
                 table.put()
-        else:
+        """else:
             #Rounds beyond the first
             #a range = currentround gives us all possible score levels to iterate on
             tablenumber = 0
-            for y in reversed(range(thisround.number):
+            for y in reversed(range(thisround.number)):
                 #find all players with y as their score
                 scorelevelplayers = []
                 for player in playerlist:
@@ -221,8 +222,8 @@ class DoPairings(webapp2.RequestHandler):
                     table = Table(parent=roundkey)
                     table.number = tablenumber + 1
                     table.players = [playerA.key,playerB.key]
-                    """TODO
-                    table.terrain = """
+                    TODO
+                    table.terrain = 
                     table.put()
                 if scorelevelplayers:
                 #someone is getting paired down
@@ -232,7 +233,7 @@ class DoPairings(webapp2.RequestHandler):
                             lowerscorelevelplayers.append(player)
                     #pick a random player from the list, then remove them
             if playerlist:
-                #There is a bye
+                #There is a bye"""
         tournament.currentround = thisround.number
         tournament.put()
         self.redirect('/run?TKEY='+tournamentkeyurlstr)    

@@ -4,21 +4,15 @@ Copied from original code by Jeff Hoogland https://github.com/JeffHoogland/
 '''
 
 #User defined values
-winPoints = 3
-drawPoints = 1
+winPoints = 1
+drawPoints = 0
 byePoints = winPoints
 
 #Load our library for building/working with graphs
 import networkx as nx
-#Library for loading player dumps
-try:
-    import cPickle as pickle
-except:
-    import pickle as pickle
-
-import csv
 import random
 
+import logging
 dbg = True
 debuglevel = 1
 
@@ -312,4 +306,4 @@ class Tournament(object):
 
 def printdbg( msg, level=1 ):
     if dbg == True and level <= debuglevel:
-        print(msg)
+        logging.info(msg)
