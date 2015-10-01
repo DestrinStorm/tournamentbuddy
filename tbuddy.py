@@ -4,7 +4,7 @@ import cgi
 import urllib
 import random
 import math
-import pypair
+import networkx as nx
 from google.appengine.api import users
 from google.appengine.ext import ndb
 import jinja2
@@ -28,10 +28,8 @@ def isFinished(thisround):
     tables = Table.query(ancestor=thisround.key).fetch()
     finished = True
     for table in tables:
-        logging.info(finished)
         if not(table.finished):
             finished = False
-    logging.info(finished)
     return finished
 
 JINJA_ENVIRONMENT.filters['formatdatetime']=formatdatetime
@@ -44,6 +42,7 @@ def user_key(user_id):
 
 ROUND_LENGTHS = {15:30,25:50,35:70,50:100,75:120,100:150,150:200,200:250}
 SCENARIOS = ['Destruction','Two Fronts','Close Quarters','Fire Support','Incoming','Incursion','Outflank','Recon']
+MAXGROUP = 50
 
 #START NDB data models
 class Tournament(ndb.Model):
@@ -71,6 +70,7 @@ class Player(ndb.Model):
     """A given player within the tournament"""
     name = ndb.StringProperty()
     faction = ndb.StringProperty(indexed=False,choices=['Cryx','Cygnar','Khador','Protectorate of Menoth','Retribution of Scyrah','Convergence of Cyriss','Mercenaries','Circle Orboros','Legion of Everblight','Skorne','Trollbloods','Minions'])
+    opponents = ndb.KeyProperty(repeated=True)
     scorelist = ndb.IntegerProperty(repeated=True)
     cplist = ndb.IntegerProperty(repeated=True)
     pcdestlist = ndb.IntegerProperty(repeated=True)
@@ -135,6 +135,8 @@ class RunTournament(webapp2.RequestHandler):
             tables = []
             thisround = []
             players = Player.query(ancestor=tournament.key).order(-Player.score, -Player.sos, -Player.cp, -Player.pcdest, Player.name).fetch()
+            for player in players:
+                logging.info(player.opponents)
             if tournament.currentround > 0:
                 thisround = Round.query(Round.number == tournament.currentround).get()
                 tables = Table.query(ancestor=thisround.key).order(Table.number).fetch()
@@ -151,92 +153,141 @@ class RunTournament(webapp2.RequestHandler):
             self.response.write(template.render(template_values))            
             
 class DoPairings(webapp2.RequestHandler):
+    def pairPlayers(self, p1key, p2key, openTable, roundkey):
+        player1 = p1key.get()
+        player2 = p2key.get()
+        logging.info("Pairing players %s and %s"%(player1.name, player2.name))
+
+        player1.opponents.append(p2key)
+        player1.put()
+        player2.opponents.append(p1key)
+        player2.put()
+        
+        table = Table(parent=roundkey)
+        table.number = openTable
+        table.players = [p1key,p2key]
+        """TODO
+        table.terrain ="""
+        table.put()
+        
+    def assignBye(self, p1key, roundkey):
+        byeplayer = p1key.get()
+        logging.info( "%s got the bye"%byeplayer.name)
+        table = Table(parent=roundkey)
+        table.number = 0
+        table.players = [p1key]
+        #Grant the player bye scores for round 1
+        byeplayer.scorelist.append(1)
+        byeplayer.cplist.append(3)
+        tournament = roundkey.parent().get()
+        byeplayer.pcdestlist.append(int(math.ceil(tournament.pointsize/2.0)))
+        byeplayer.put()
+        table.finished = True
+        table.put()
+    
     def get(self):
+        logging.info("Starting the pairing process")
         tournamentkeyurlstr = self.request.get('TKEY')
         tournamentkey = ndb.Key(urlsafe=tournamentkeyurlstr)
         tournament = tournamentkey.get()
         playerlist = Player.query(ancestor=tournamentkey).fetch()
+        logging.info(playerlist)
         #Generate the new round container
         thisround = Round(parent=tournamentkey)
         thisround.number = tournament.currentround + 1
         thisround.length = ROUND_LENGTHS[tournament.pointsize] + random.choice([5,10,15,-5,-10,-15])
         thisround.scenario = random.choice(SCENARIOS)
         roundkey = thisround.put()
-        #Initial random pairing?
-        if thisround.number == 1:
-            #for the number of tables we have (floor of players/2)
-            for x in range(1,(len(playerlist)/2)+1):
-                #pick a random player from the list, then remove them
-                playerA = random.choice(playerlist)
-                playerlist.remove(playerA)
-                #and their opponent
-                playerB = random.choice(playerlist)
-                playerlist.remove(playerB)
-                table = Table(parent=roundkey)
-                table.number = x
-                table.players = [playerA.key,playerB.key]
-                """TODO
-                table.terrain = """
-                table.put()
-            if playerlist:
-                #There is a bye
-                byeplayer = playerlist[0]
-                table = Table(parent=roundkey)
-                table.number = 0
-                table.players = [byeplayer.key]
-                #Grant the player bye scores for round 1
-                byeplayer.scorelist.append(1)
-                byeplayer.cplist.append(3)
-                byeplayer.pcdestlist.append(int(math.ceil(tournament.pointsize/2.0)))
-                byeplayer.put()
-                table.finished = True
-                table.put()
-        """else:
-            #Rounds beyond the first
-            #a range = currentround gives us all possible score levels to iterate on
-            tablenumber = 0
-            for y in reversed(range(thisround.number)):
-                #find all players with y as their score
-                scorelevelplayers = []
-                for player in playerlist:
-                    if player.score == y:
-                        scorelevelplayers.append(player)
-                    #pick a random player from the list, then remove them
-                    playerA = random.choice(scorelevelplayers)
-                    scorelevelplayers.remove(playerA)
-                    #and their opponent = but we need to make sure they haven't played before
-                    #grab all the times playerA has played
-                    qry = Table.query(Table.players == playerA.key)
-                    #pull out all player keys and put in a set to remove duplicates
-                    opponentsOfA = set(qry.fetch())
-                    #delete playerA
-                    opponentsOfA.remove(playerA.key)
-                    #cut down the potential opponent list
-                    scorelevelminusopponents = scorelevelplayers
-                    for player in scorelevelminusopponents:
-                        if player.key in opponentsOfA:
-                            scorelevelminusopponents.remove(player)
-                    playerB = random.choice(scorelevelminusopponents)
-                    scorelevelplayers.remove(playerB)
-                    #what table should this be?  
-                    table = Table(parent=roundkey)
-                    table.number = tablenumber + 1
-                    table.players = [playerA.key,playerB.key]
-                    TODO
-                    table.terrain = 
-                    table.put()
-                if scorelevelplayers:
-                #someone is getting paired down
-                    lowerscorelevelplayers = []
-                    for player in playerlist:
-                        if player.score == y-1:
-                            lowerscorelevelplayers.append(player)
-                    #pick a random player from the list, then remove them
-            if playerlist:
-                #There is a bye"""
+        #INITILISATION
+        startingTable = 1
+        openTable = startingTable
+        #Contains lists of players sorted by how many points they currently have
+        pointLists = {}
+        #Contains a list of points in the event from high to low
+        pointTotals = []
+        #Counts our groupings for each point amount
+        countPoints = {}
+        #Add all players to pointLists
+        for player in playerlist:
+            #If this point amount isn't in the list, add it
+            if "%s_1"%player.score not in pointLists:
+                pointLists["%s_1"%player.score] = []
+                countPoints[player.score] = 1
+            
+            #Breaks the players into groups of their current points up to the max group allowed.
+            #Smaller groups mean faster calculations
+            if len(pointLists["%s_%s"%(player.score, countPoints[player.score])]) > MAXGROUP:
+                countPoints[player.score] += 1
+                pointLists["%s_%s"%(player.score, countPoints[player.score])] = []
+            
+            #Add the NDB key of our player to the correct group
+            pointLists["%s_%s"%(player.score, countPoints[player.score])].append(player.key)
+        
+        #Add all points in use to pointTotals
+        for points in pointLists:
+            pointTotals.append(points)
+            
+        #Sort our point groups based on points
+        pointTotals.sort(reverse=True, key=lambda s: int(s.split('_')[0]))
+        
+        logging.info( "Point toals after sorting high to low are: %s"%pointTotals)
+
+        #Actually pair the players utilizing graph theory networkx
+        for points in pointTotals:
+            logging.info(points) 
+                
+            #Create the graph object and add all players to it
+            bracketGraph = nx.Graph()
+            bracketGraph.add_nodes_from(pointLists[points])
+            
+            logging.info(pointLists[points])
+            logging.info(bracketGraph.nodes())
+                
+            #Create edges between all players in the graph who haven't already played
+            for playerkey in bracketGraph.nodes():
+                player = playerkey.get()
+                for opponentkey in bracketGraph.nodes():
+                    opponent = opponentkey.get()
+                    if opponentkey not in player.opponents and playerkey != opponentkey:
+                        #Weight edges randomly between 1 and 9 to ensure pairings are not always the same with the same list of players
+                        wgt = random.randint(1, 9)
+                        #If a player has more points, weigh them the highest so they get paired first
+                        if player.score > int(points.split('_')[0]) or opponent.score > int(points.split('_')[0]):
+                            wgt = 10
+                        #Create edge
+                        bracketGraph.add_edge(playerkey, opponentkey, weight=wgt)
+            
+            #Generate pairings from the created graph
+            pairings = nx.max_weight_matching(bracketGraph)
+            
+            logging.info(pairings)
+            
+            #Actually pair the players based on the matching we found
+            for p in pairings:
+                if p in pointLists[points]:
+                    self.pairPlayers(p, pairings[p], openTable, roundkey)
+                    openTable += 1
+                    pointLists[points].remove(p)
+                    pointLists[points].remove(pairings[p])
+                
+            #Check if we have an odd man out that we need to pair down
+            if len(pointLists[points]) > 0:
+                #Check to make sure we aren't at the last player in the event
+                logging.info("Player %s left in %s. The index is %s and the length of totals is %s"%(pointLists[points][0], points, pointTotals.index(points), len(pointTotals)))
+                if pointTotals.index(points) + 1 == len(pointTotals):
+                    while len(pointLists[points]) > 0:
+                        #If they are the last player give them a bye
+                        logging.info("I'm assigning a bye")
+                        self.assignBye(pointLists[points].pop(0), roundkey)
+                else:
+                    #Add our player to the next point group down
+                    logging.info("I'm pairing down")
+                    nextPoints = pointTotals[pointTotals.index(points) + 1]
+                    while len(pointLists[points]) > 0:
+                        pointLists[nextPoints].append(pointLists[points].pop(0))
         tournament.currentround = thisround.number
         tournament.put()
-        self.redirect('/run?TKEY='+tournamentkeyurlstr)    
+        self.redirect('/run?TKEY='+tournamentkeyurlstr)
 
 class Results(webapp2.RequestHandler):
     def get(self):
@@ -294,7 +345,7 @@ class ResultsSubmit(webapp2.RequestHandler):
                         players[x].scorelist.append(0)
                     players[x].cplist.append(int(cps[x]))
                     players[x].pcdestlist.append(int(pcdest[x]))
-                #also sort out SOS
+                #TODO: Calculate SOS
                 players[x].put()
             #Mark the table as finished
             table.finished = True
@@ -323,6 +374,7 @@ class AddPlayer(webapp2.RequestHandler):
             player = Player(parent=tournamentkey)
             player.name = self.request.get('name')
             player.faction = self.request.get('faction')
+            player.opponents = []
             player.put()
         self.redirect('/run?TKEY='+tournamentkeyurlstr)
         
