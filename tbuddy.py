@@ -138,7 +138,8 @@ class RunTournament(webapp2.RequestHandler):
             for player in players:
                 logging.info(player.opponents)
             if tournament.currentround > 0:
-                thisround = Round.query(Round.number == tournament.currentround).get()
+                getrounds = Round.query(ancestor=tournamentkey)
+                thisround = getrounds.filter(Round.number == tournament.currentround).get()
                 tables = Table.query(ancestor=thisround.key).order(Table.number).fetch()
             template_values = {
                 'user': user,
@@ -260,6 +261,7 @@ class DoPairings(webapp2.RequestHandler):
             #Generate pairings from the created graph
             pairings = nx.max_weight_matching(bracketGraph)
             
+            logging.info(bracketGraph.edges(data= True))
             logging.info(pairings)
             
             #Actually pair the players based on the matching we found
