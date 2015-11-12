@@ -78,6 +78,8 @@ class Player(ndb.Model):
     cp = ndb.ComputedProperty(lambda self: sum(self.cplist))
     pcdest = ndb.ComputedProperty(lambda self: sum(self.pcdestlist))
     sos = ndb.IntegerProperty(default=0)
+    bye = ndb.BooleanProperty(default=False)
+    pairedDown = ndb.BooleanProperty(default=False)
 #END NDB data models
 
 class MainPage(webapp2.RequestHandler):
@@ -182,6 +184,7 @@ class DoPairings(webapp2.RequestHandler):
         byeplayer.cplist.append(3)
         tournament = roundkey.parent().get()
         byeplayer.pcdestlist.append(int(math.ceil(tournament.pointsize/2.0)))
+        byeplayer.bye = True
         byeplayer.put()
         table.finished = True
         table.put()
@@ -223,7 +226,7 @@ class DoPairings(webapp2.RequestHandler):
             
             #Add the NDB key of our player to the correct group
             pointLists["%s_%s"%(player.score, countPoints[player.score])].append(player.key)
-        
+        logging.info(pointLists)
         #Add all points in use to pointTotals
         for points in pointLists:
             pointTotals.append(points)
@@ -232,8 +235,34 @@ class DoPairings(webapp2.RequestHandler):
         pointTotals.sort(reverse=True, key=lambda s: int(s.split('_')[0]))
         
         logging.info( "Point toals after sorting high to low are: %s"%pointTotals)
-
-        #Actually pair the players utilizing graph theory networkx
+        
+        #Firstly lets deal with the bye situation
+        #Do we have an uneven number of players involved?
+        if len(playerlist) % 2 > 0:
+            #yep, find the lowest scored player who hasn't yet been byed
+            pointTotalsIndex = -1
+            while pointTotalsIndex < 0:
+                playerkeysAtThisLevel = pointLists[pointTotals[pointTotalsIndex]]
+                #sift out those who have already been byed
+                for playerkey in playerkeysAtThisLevel:
+                    player = playerkey.get()
+                    if player.bye:
+                        playerkeyssAtThisLevel.remove(playerkey)
+                #anyone left?
+                if len(playerkeysAtThisLevel) > 0:
+                    #yep, pick someone
+                    byePlayerkey = random.choice(playerkeysAtThisLevel)
+                    #remove them from the pointslist so we don't try and pair them again
+                    pointLists[pointTotals[pointTotalsIndex]].remove(byePlayerkey)
+                    #log it
+                    self.assignBye(byePlayerkey, roundkey)
+                    #set our index so we can escape
+                    pointTotalsIndex = 0
+                else:
+                    #nope, move up the scorechart
+                    pointTotalsIndex -= 1
+        
+        #That's the bye dealt with, pair everyone else
         for points in pointTotals:
             logging.info(points) 
                 
@@ -253,7 +282,11 @@ class DoPairings(webapp2.RequestHandler):
                         #Weight edges randomly between 1 and 9 to ensure pairings are not always the same with the same list of players
                         wgt = random.randint(1, 9)
                         #If a player has more points, weigh them the highest so they get paired first
-                        if player.score > int(points.split('_')[0]) or opponent.score > int(points.split('_')[0]):
+                        #I believe this is irrelevant now we are checking the pairedDownflag
+                        #if player.score > int(points.split('_')[0]) or opponent.score > int(points.split('_')[0]):
+                            #wgt = 10
+                        #If a player has been paired down, first time or not, rank them high to get paired first
+                        if player.pairedDown == True or opponent.pairedDown == True:
                             wgt = 10
                         #Create edge
                         bracketGraph.add_edge(playerkey, opponentkey, weight=wgt)
@@ -274,19 +307,15 @@ class DoPairings(webapp2.RequestHandler):
                 
             #Check if we have an odd man out that we need to pair down
             if len(pointLists[points]) > 0:
-                #Check to make sure we aren't at the last player in the event
                 logging.info("Player %s left in %s. The index is %s and the length of totals is %s"%(pointLists[points][0], points, pointTotals.index(points), len(pointTotals)))
-                if pointTotals.index(points) + 1 == len(pointTotals):
-                    while len(pointLists[points]) > 0:
-                        #If they are the last player give them a bye
-                        logging.info("I'm assigning a bye")
-                        self.assignBye(pointLists[points].pop(0), roundkey)
-                else:
-                    #Add our player to the next point group down
-                    logging.info("I'm pairing down")
-                    nextPoints = pointTotals[pointTotals.index(points) + 1]
-                    while len(pointLists[points]) > 0:
-                        pointLists[nextPoints].append(pointLists[points].pop(0))
+                #Add our player to the next point group down
+                logging.info("I'm pairing down")
+                player = pointLists[points][0].get()
+                player.pairedDown = True
+                player.put()
+                nextPoints = pointTotals[pointTotals.index(points) + 1]
+                while len(pointLists[points]) > 0:
+                    pointLists[nextPoints].append(pointLists[points].pop(0))
         tournament.currentround = thisround.number
         tournament.put()
         self.redirect('/run?TKEY='+tournamentkeyurlstr)
