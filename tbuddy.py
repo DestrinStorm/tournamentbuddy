@@ -4,6 +4,7 @@ import cgi
 import urllib
 import random
 import math
+import itertools as it
 import networkx as nx
 from google.appengine.api import users
 from google.appengine.ext import ndb
@@ -162,8 +163,13 @@ class DoPairings(webapp2.RequestHandler):
         logging.info("Pairing players %s and %s"%(player1.name, player2.name))
 
         player1.opponents.append(p2key)
+        if player1.score > player2.score:
+            player1.pairedDown = True
         player1.put()
+        
         player2.opponents.append(p1key)
+        if player2.score > player1.score:
+            player2.pairedDown = True
         player2.put()
         
         table = Table(parent=roundkey)
@@ -195,6 +201,7 @@ class DoPairings(webapp2.RequestHandler):
         tournamentkey = ndb.Key(urlsafe=tournamentkeyurlstr)
         tournament = tournamentkey.get()
         playerlist = Player.query(ancestor=tournamentkey).fetch()
+        playerkeylist = []
         logging.info(playerlist)
         #Generate the new round container
         thisround = Round(parent=tournamentkey)
@@ -223,9 +230,10 @@ class DoPairings(webapp2.RequestHandler):
             if len(pointLists["%s_%s"%(player.score, countPoints[player.score])]) > MAXGROUP:
                 countPoints[player.score] += 1
                 pointLists["%s_%s"%(player.score, countPoints[player.score])] = []
-            
             #Add the NDB key of our player to the correct group
             pointLists["%s_%s"%(player.score, countPoints[player.score])].append(player.key)
+            #and the list of all playerkeys
+            playerkeylist.append(player.key)
         logging.info(pointLists)
         #Add all points in use to pointTotals
         for points in pointLists:
@@ -233,7 +241,6 @@ class DoPairings(webapp2.RequestHandler):
             
         #Sort our point groups based on points
         pointTotals.sort(reverse=True, key=lambda s: int(s.split('_')[0]))
-        
         logging.info( "Point toals after sorting high to low are: %s"%pointTotals)
         
         #Firstly lets deal with the bye situation
@@ -243,17 +250,27 @@ class DoPairings(webapp2.RequestHandler):
             pointTotalsIndex = -1
             while pointTotalsIndex < 0:
                 playerkeysAtThisLevel = pointLists[pointTotals[pointTotalsIndex]]
+                logging.info(pointTotals[pointTotalsIndex])
+                logging.info(playerkeysAtThisLevel)
                 #sift out those who have already been byed
-                for playerkey in playerkeysAtThisLevel:
+                #copy for iteration
+                keysforiteration = playerkeysAtThisLevel
+                logging.info(keysforiteration)
+                for playerkey in keysforiteration:
+                #the fuck is going on in this loop?  It doesn't always run for every item in the iteration list
                     player = playerkey.get()
+                    logging.info(player)
                     if player.bye:
-                        playerkeyssAtThisLevel.remove(playerkey)
+                        logging.info("already had a bye, removing")
+                        playerkeysAtThisLevel.remove(playerkey)
+                logging.info(playerkeysAtThisLevel)
                 #anyone left?
                 if len(playerkeysAtThisLevel) > 0:
                     #yep, pick someone
                     byePlayerkey = random.choice(playerkeysAtThisLevel)
                     #remove them from the pointslist so we don't try and pair them again
                     pointLists[pointTotals[pointTotalsIndex]].remove(byePlayerkey)
+                    playerkeylist.remove(byePlayerkey)
                     #log it
                     self.assignBye(byePlayerkey, roundkey)
                     #set our index so we can escape
@@ -263,59 +280,55 @@ class DoPairings(webapp2.RequestHandler):
                     pointTotalsIndex -= 1
         
         #That's the bye dealt with, pair everyone else
-        for points in pointTotals:
-            logging.info(points) 
-                
-            #Create the graph object and add all players to it
-            bracketGraph = nx.Graph()
-            bracketGraph.add_nodes_from(pointLists[points])
-            
-            logging.info(pointLists[points])
-            logging.info(bracketGraph.nodes())
-                
-            #Create edges between all players in the graph who haven't already played
-            for playerkey in bracketGraph.nodes():
-                player = playerkey.get()
-                for opponentkey in bracketGraph.nodes():
-                    opponent = opponentkey.get()
-                    if opponentkey not in player.opponents and playerkey != opponentkey:
-                        #Weight edges randomly between 1 and 9 to ensure pairings are not always the same with the same list of players
-                        wgt = random.randint(1, 9)
-                        #If a player has more points, weigh them the highest so they get paired first
-                        #I believe this is irrelevant now we are checking the pairedDownflag
-                        #if player.score > int(points.split('_')[0]) or opponent.score > int(points.split('_')[0]):
-                            #wgt = 10
-                        #If a player has been paired down, first time or not, rank them high to get paired first
-                        if player.pairedDown == True or opponent.pairedDown == True:
-                            wgt = 10
-                        #Create edge
-                        bracketGraph.add_edge(playerkey, opponentkey, weight=wgt)
-            
-            #Generate pairings from the created graph
-            pairings = nx.max_weight_matching(bracketGraph)
-            
-            logging.info(bracketGraph.edges(data= True))
-            logging.info(pairings)
-            
-            #Actually pair the players based on the matching we found
-            for p in pairings:
-                if p in pointLists[points]:
-                    self.pairPlayers(p, pairings[p], openTable, roundkey)
-                    openTable += 1
-                    pointLists[points].remove(p)
-                    pointLists[points].remove(pairings[p])
-                
-            #Check if we have an odd man out that we need to pair down
-            if len(pointLists[points]) > 0:
-                logging.info("Player %s left in %s. The index is %s and the length of totals is %s"%(pointLists[points][0], points, pointTotals.index(points), len(pointTotals)))
-                #Add our player to the next point group down
-                logging.info("I'm pairing down")
-                player = pointLists[points][0].get()
-                player.pairedDown = True
-                player.put()
-                nextPoints = pointTotals[pointTotals.index(points) + 1]
-                while len(pointLists[points]) > 0:
-                    pointLists[nextPoints].append(pointLists[points].pop(0))
+        #Create the graph object and add all players to it
+        bracketGraph = nx.Graph()
+        bracketGraph.add_nodes_from(playerkeylist)
+        
+        logging.info(playerkeylist)
+        logging.info(bracketGraph.nodes())
+
+        #Create edges between all players in the graph who haven't already played
+        #general approach: 2 tier matching graph, players with the same score are given tier 1 weighting (11-20)
+        #players that differ by one scoring boundary have a tier 2 weighting (1-10)
+        #then run an optimised weight match algorithm to generate pairings
+        for playerkey,opponentkey in it.combinations(bracketGraph.nodes(),2):
+            player = playerkey.get()
+            if opponentkey not in player.opponents:
+                #these two haven't played yet
+                opponent = opponentkey.get()
+                #Are these players at the same points level?
+                if player.score == opponent.score:
+                    #sure are, weight these two as 'tier 1' match
+                    wgt = random.randint(11, 20)
+                #Are they within one score bracket of each other?
+                elif abs(pointTotals.index("%s_1"%player.score) - pointTotals.index("%s_1"%opponent.score)) < 2:
+                    #yep, maybe, check higher score person hasn't been paired down already then assign tier 2 match
+                    if player.score > opponent.score:
+                        if not(player.pairedDown):
+                            wgt = random.randint(1, 10)
+                    else:
+                        if not(opponent.pairedDown):
+                            wgt = random.randint(1, 10)
+                #Create edge
+                bracketGraph.add_edge(playerkey, opponentkey, weight=wgt)
+
+        #Generate pairings from the created graph
+        #maxcardinality ensures maximum matchups are generated, regardless of weighting
+        pairings = nx.max_weight_matching(bracketGraph,maxcardinality=True)
+
+        logging.info(bracketGraph.edges(data= True))
+        logging.info(pairings)
+
+        #Actually pair the players based on the matching we found
+        for p in pairings:
+            logging.info(p)
+            if p in playerkeylist:
+                logging.info(pointLists[points])
+                self.pairPlayers(p, pairings[p], openTable, roundkey)
+                openTable += 1
+                playerkeylist.remove(p)
+                playerkeylist.remove(pairings[p])
+
         tournament.currentround = thisround.number
         tournament.put()
         self.redirect('/run?TKEY='+tournamentkeyurlstr)
