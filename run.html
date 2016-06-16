@@ -72,6 +72,8 @@
       <br>
     {% if tournament.currentround == 0%}
     <input type="button" onclick="location.href='/pair?TKEY={{ tournament.key.urlsafe() }}';" value="Perform pairings for round {{tournament.currentround + 1}}"/>
+    {% elif tournament|clearWinner %}
+    <h1>Tournament over, {{players[0].name}} wins!</h1>  
     {% elif thisround|isFinished %}
     <input type="button" onclick="location.href='/pair?TKEY={{ tournament.key.urlsafe() }}';" value="Perform pairings for round {{tournament.currentround + 1}}"/>
     {% endif %}

@@ -33,9 +33,25 @@ def isFinished(thisround):
             finished = False
     return finished
 
+def clearWinner(tournament):
+    logging.info("firing winner check")
+    playerlist = Player.query(ancestor=tournament.key).fetch(projection=[Player.name, Player.score])
+    highscore = 0
+    for player in playerlist:
+        logging.info(highscore)
+        if player.score > highscore:
+            highscore = player.score
+    highScorers = Player.query(Player.score == highscore,ancestor=tournament.key).fetch()
+    logging.info(highScorers)
+    logging.info(len(highScorers))
+    if len(highScorers) == 1:
+        return True
+    return False
+
 JINJA_ENVIRONMENT.filters['formatdatetime']=formatdatetime
 JINJA_ENVIRONMENT.filters['getplayercount']=getplayercount
 JINJA_ENVIRONMENT.filters['isFinished']=isFinished
+JINJA_ENVIRONMENT.filters['clearWinner']=clearWinner
 
 def user_key(user_id):
     """Constructs a Datastore key for a user entity."""
@@ -43,6 +59,7 @@ def user_key(user_id):
 
 ROUND_LENGTHS = {15:30,25:50,35:70,50:100,75:120,100:150,150:200,200:250}
 SCENARIOS = ['Destruction','Two Fronts','Close Quarters','Fire Support','Incoming','Incursion','Outflank','Recon']
+FACTIONS = ['Cryx','Cygnar','Khador','Protectorate of Menoth','Retribution of Scyrah','Convergence of Cyriss','Mercenaries','Circle Orboros','Legion of Everblight','Skorne','Trollbloods','Minions']
 MAXGROUP = 50
 
 #START NDB data models
@@ -58,7 +75,7 @@ class Round(ndb.Model):
     """A round within the tournament"""
     number = ndb.IntegerProperty()
     length = ndb.IntegerProperty(indexed=False)
-    scenario = ndb.StringProperty(indexed=False,choices=['Destruction','Two Fronts','Close Quarters','Fire Support','Incoming','Incursion','Outflank','Recon'])
+    scenario = ndb.StringProperty(indexed=False,choices=SCENARIOS)
     
 class Table(ndb.Model):
     """A table/pairing of players within a given round of the tournament"""
@@ -70,7 +87,7 @@ class Table(ndb.Model):
 class Player(ndb.Model):
     """A given player within the tournament"""
     name = ndb.StringProperty()
-    faction = ndb.StringProperty(indexed=False,choices=['Cryx','Cygnar','Khador','Protectorate of Menoth','Retribution of Scyrah','Convergence of Cyriss','Mercenaries','Circle Orboros','Legion of Everblight','Skorne','Trollbloods','Minions'])
+    faction = ndb.StringProperty(indexed=False,choices=FACTIONS)
     opponents = ndb.KeyProperty(repeated=True)
     scorelist = ndb.IntegerProperty(repeated=True)
     cplist = ndb.IntegerProperty(repeated=True)
@@ -241,7 +258,7 @@ class DoPairings(webapp2.RequestHandler):
             
         #Sort our point groups based on points
         pointTotals.sort(reverse=True, key=lambda s: int(s.split('_')[0]))
-        logging.info( "Point toals after sorting high to low are: %s"%pointTotals)
+        logging.info( "Point totals after sorting high to low are: %s"%pointTotals)
         
         #Firstly lets deal with the bye situation
         #Do we have an uneven number of players involved?
@@ -309,6 +326,9 @@ class DoPairings(webapp2.RequestHandler):
                     else:
                         if not(opponent.pairedDown):
                             wgt = random.randint(1, 10)
+                else:
+                    #these guys are too far apart to be paired
+                    wgt = -1
                 #Create edge
                 bracketGraph.add_edge(playerkey, opponentkey, weight=wgt)
 
