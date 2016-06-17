@@ -3,6 +3,18 @@
 <html>
   <head>
     <link type="text/css" rel="stylesheet" href="/stylesheets/main.css" />
+    <script type="text/javascript">
+    function chkcontrol(j) {
+    var total=0;
+    for(var i=0; i < document.tablelist.ckb.length; i++){
+        if(document.tablelist.ckb[i].checked){
+            total=total +1;}}
+        if(total != 2){
+            document.getElementById("seatswap").style.visibility="hidden";
+            return false;
+        }
+        else {document.getElementById("seatswap").style.visibility="visible";}
+} </script>
   </head>
   <body>
     <h1>{{ tournament.system }} Tournament {{ tournament.name }}</h1>
@@ -20,12 +32,12 @@
     {% if tournament.currentround > 0 %}
         <h2>Round Length: {{thisround.length}} mins</h2>
         <h2>Scenario: {{thisround.scenario}}</h2>
-    <table>
+    <form name="tablelist" action="/swapplayers?" method="get">
+      <table>
         <tr>
             <th>Table</th>
             <th>Player A</th>
             <th>Player B</th>
-            <th>Terrain</th>
             <th>Finished?</th>
         </tr>
         {% for table in tables %}
@@ -34,11 +46,11 @@
             {% if table.number == 0 %}
                 <td>{{table.players[0].get().name}}</td><td>Bye</td>
             {% else %}
-                {% for tableplayer in table.players %}
-                <td>{{tableplayer.get().name}}</td>
-                {% endfor %}
+                <td><label for="{{table.players[0].get().key.urlsafe()}}">
+                    <input type="checkbox" name="ckb" id="{{table.players[0].get().key.urlsafe()}}" value="{{table.players[0].get().key.urlsafe()}}" onclick="chkcontrol('{{table.players[0].get().key.urlsafe()}}')";>{{table.players[0].get().name}}</label></td>
+                <td><label for="{{table.players[1].get().key.urlsafe()}}">
+                    <input type="checkbox" name="ckb" id="{{table.players[1].get().key.urlsafe()}}" value="{{table.players[1].get().key.urlsafe()}}" onclick="chkcontrol('{{table.players[1].get().key.urlsafe()}}')";>{{table.players[1].get().name}}</label></td>
             {% endif %}
-            <td>{{table.terrain}}</td>
             <td>{{table.finished}}</td>
             {% if table.number > 0 %}
             <td><a href="results?TABKEY={{ table.key.urlsafe() }}">results</td>
@@ -46,6 +58,8 @@
         </tr>
         {% endfor %}
     </table>
+    <input type="submit" id="seatswap" value="Swap player seating" style="visibility:hidden">
+    </form>
     {% endif %}
     <h2>Players: {{ tournament|getplayercount }}</h2>
     <table>

@@ -57,8 +57,8 @@ def user_key(user_id):
     """Constructs a Datastore key for a user entity."""
     return ndb.Key('User', user_id)
 
-ROUND_LENGTHS = {15:30,25:50,35:70,50:100,75:120,100:150,150:200,200:250}
-SCENARIOS = ['Destruction','Two Fronts','Close Quarters','Fire Support','Incoming','Incursion','Outflank','Recon']
+ROUND_LENGTHS = {0:30,25:50,50:70,75:100,100:120,150:150,200:200}
+SCENARIOS = ['Entrenched','Line Breaker','Take and Hold','The Pit','Extraction','Incursion','Outlast','Recon']
 FACTIONS = ['Cryx','Cygnar','Khador','Protectorate of Menoth','Retribution of Scyrah','Convergence of Cyriss','Mercenaries','Circle Orboros','Legion of Everblight','Skorne','Trollbloods','Minions']
 MAXGROUP = 50
 
@@ -68,7 +68,7 @@ class Tournament(ndb.Model):
     name = ndb.StringProperty(indexed=False)
     date = ndb.DateTimeProperty(auto_now_add=True)
     system = ndb.StringProperty(indexed=False)
-    pointsize = ndb.IntegerProperty(default=50)
+    pointsize = ndb.IntegerProperty(default=75)
     currentround = ndb.IntegerProperty(indexed=False,default=0)
 
 class Round(ndb.Model):
@@ -81,7 +81,6 @@ class Table(ndb.Model):
     """A table/pairing of players within a given round of the tournament"""
     number = ndb.IntegerProperty()
     players = ndb.KeyProperty(repeated=True)
-    terrain = ndb.StringProperty(indexed=False)
     finished = ndb.BooleanProperty(indexed=False,default=False)
     
 class Player(ndb.Model):
@@ -192,8 +191,6 @@ class DoPairings(webapp2.RequestHandler):
         table = Table(parent=roundkey)
         table.number = openTable
         table.players = [p1key,p2key]
-        """TODO
-        table.terrain ="""
         table.put()
         
     def assignBye(self, p1key, roundkey):
@@ -223,7 +220,8 @@ class DoPairings(webapp2.RequestHandler):
         #Generate the new round container
         thisround = Round(parent=tournamentkey)
         thisround.number = tournament.currentround + 1
-        thisround.length = ROUND_LENGTHS[tournament.pointsize] + random.choice([5,10,15,-5,-10,-15])
+        #Random round timer adjustment removed in SR2016
+        thisround.length = ROUND_LENGTHS[tournament.pointsize]# + random.choice([5,10,15,-5,-10,-15])
         thisround.scenario = random.choice(SCENARIOS)
         roundkey = thisround.put()
         #INITILISATION

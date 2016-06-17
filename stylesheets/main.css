@@ -10,3 +10,9 @@ table {
 table, th, td {
    border: 1px solid black;
 }
+
+label {
+    cursor: pointer;
+    display: block;
+    text-align: center;
+}
