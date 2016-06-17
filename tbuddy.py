@@ -34,16 +34,12 @@ def isFinished(thisround):
     return finished
 
 def clearWinner(tournament):
-    logging.info("firing winner check")
     playerlist = Player.query(ancestor=tournament.key).fetch(projection=[Player.name, Player.score])
     highscore = 0
     for player in playerlist:
-        logging.info(highscore)
         if player.score > highscore:
             highscore = player.score
     highScorers = Player.query(Player.score == highscore,ancestor=tournament.key).fetch()
-    logging.info(highScorers)
-    logging.info(len(highScorers))
     if len(highScorers) == 1:
         return True
     return False
@@ -154,8 +150,6 @@ class RunTournament(webapp2.RequestHandler):
             tables = []
             thisround = []
             players = Player.query(ancestor=tournament.key).order(-Player.score, -Player.sos, -Player.cp, -Player.pcdest, Player.name).fetch()
-            for player in players:
-                logging.info(player.opponents)
             if tournament.currentround > 0:
                 getrounds = Round.query(ancestor=tournamentkey)
                 thisround = getrounds.filter(Round.number == tournament.currentround).get()
@@ -384,7 +378,6 @@ class ResultsSubmit(webapp2.RequestHandler):
             tablekeyurlstr = self.request.get('TABKEY')
             table = ndb.Key(urlsafe=tablekeyurlstr).get()
             thisround = table.key.parent().get()
-            logging.info(thisround.number)
             #Add in player scores
             winnerkeyurlstr = self.request.get('win')        
             cps = self.request.get_all('cps')
@@ -450,6 +443,42 @@ class DropPlayer(webapp2.RequestHandler):
             if identity == playerkey.parent().parent().id():
                 playerkey.delete()
         self.redirect('/run?TKEY='+tournamentkeyurlstr)
+
+class SwapPlayers(webapp2.RequestHandler):
+    def get(self):
+        tournamentkeyurlstr = self.request.get('TKEY')
+        if users.get_current_user():
+            identity=users.get_current_user().user_id()
+            swapees = self.request.get_all("ckb")
+            if len(swapees) == 2: #paranoia
+                #fetch the things
+                table0 = ndb.Key(urlsafe=swapees[0][:-1]).get()
+                table1 = ndb.Key(urlsafe=swapees[1][:-1]).get()
+                if table0 != table1: #not worth the hassle
+                    player0 = table0.players.pop(int(swapees[0][-1])).get()
+                    affectedplayer0 = table0.players[0].get()
+                    player0.opponents.remove(affectedplayer0.key)
+                    affectedplayer0.opponents.remove(player0.key)
+                    player1 = table1.players.pop(int(swapees[1][-1])).get()
+                    affectedplayer1 = table1.players[0].get()
+                    player1.opponents.remove(affectedplayer1.key)
+                    affectedplayer1.opponents.remove(player1.key)
+                    #players 0 and 1 now free of their tables and removed from affected opponents list, pair them with new opponents
+                    player0.opponents.append(affectedplayer1.key)
+                    affectedplayer1.opponents.append(player0.key)
+                    player1.opponents.append(affectedplayer0.key)
+                    affectedplayer0.opponents.append(player1.key)
+                    #now seat them at the tables
+                    table0.players.append(player1.key)
+                    table1.players.append(player0.key)
+                    #all the puts
+                    player0.put()
+                    player1.put()
+                    table0.put()
+                    table1.put()
+                    affectedplayer0.put()
+                    affectedplayer1.put()            
+        self.redirect('/run?TKEY='+tournamentkeyurlstr)
         
 app = webapp2.WSGIApplication([
     ('/', MainPage),
@@ -462,4 +491,5 @@ app = webapp2.WSGIApplication([
     ('/results', Results),
     ('/resultssubmit', ResultsSubmit),
     ('/changepoints', ChangePoints),
+    ('/swapplayers', SwapPlayers),
 ], debug=True)

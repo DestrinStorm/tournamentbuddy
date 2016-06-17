@@ -33,6 +33,7 @@
         <h2>Round Length: {{thisround.length}} mins</h2>
         <h2>Scenario: {{thisround.scenario}}</h2>
     <form name="tablelist" action="/swapplayers?" method="get">
+    <input type="hidden" name="TKEY" value="{{ tournament.key.urlsafe() }}">
       <table>
         <tr>
             <th>Table</th>
@@ -47,9 +48,10 @@
                 <td>{{table.players[0].get().name}}</td><td>Bye</td>
             {% else %}
                 <td><label for="{{table.players[0].get().key.urlsafe()}}">
-                    <input type="checkbox" name="ckb" id="{{table.players[0].get().key.urlsafe()}}" value="{{table.players[0].get().key.urlsafe()}}" onclick="chkcontrol('{{table.players[0].get().key.urlsafe()}}')";>{{table.players[0].get().name}}</label></td>
+                    <input type="checkbox" name="ckb" id="{{table.players[0].urlsafe()}}" value="{{table.key.urlsafe()}}0" onclick="chkcontrol('{{table.players[0].urlsafe()}}')";>{{table.players[0].get().name}}</label></td>
                 <td><label for="{{table.players[1].get().key.urlsafe()}}">
-                    <input type="checkbox" name="ckb" id="{{table.players[1].get().key.urlsafe()}}" value="{{table.players[1].get().key.urlsafe()}}" onclick="chkcontrol('{{table.players[1].get().key.urlsafe()}}')";>{{table.players[1].get().name}}</label></td>
+                    {{table.players[1].get().name}}
+                    <input type="checkbox" name="ckb" id="{{table.players[1].urlsafe()}}" value="{{table.key.urlsafe()}}1" onclick="chkcontrol('{{table.players[1].urlsafe()}}')";></label></td>
             {% endif %}
             <td>{{table.finished}}</td>
             {% if table.number > 0 %}
