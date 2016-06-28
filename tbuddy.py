@@ -90,7 +90,7 @@ class Player(ndb.Model):
     score = ndb.ComputedProperty(lambda self: sum(self.scorelist))
     cp = ndb.ComputedProperty(lambda self: sum(self.cplist))
     pcdest = ndb.ComputedProperty(lambda self: sum(self.pcdestlist))
-    sos = ndb.IntegerProperty(default=0)
+    sos = ndb.ComputedProperty(lambda self: sum(opponent.get().score for opponent in self.opponents))
     bye = ndb.BooleanProperty(default=False)
     pairedDown = ndb.BooleanProperty(default=False)
 #END NDB data models

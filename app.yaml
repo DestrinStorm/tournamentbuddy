@@ -1,10 +1,15 @@
 application: tournamentbuddy
-version: 2-1
+version: 2
 runtime: python27
 api_version: 1
 threadsafe: true
 
 handlers:
+- url: /update_schema
+  script: update_schema_handler.app  # path to webapp2 application definition.
+  login: admin
+  secure: always
+  
 - url: /stylesheets
   static_dir: stylesheets
   
