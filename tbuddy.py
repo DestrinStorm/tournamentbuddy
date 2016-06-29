@@ -82,6 +82,8 @@ class Table(ndb.Model):
 class Player(ndb.Model):
     """A given player within the tournament"""
     name = ndb.StringProperty()
+    number = ndb.IntegerProperty()
+    note = ndb.StringProperty(default="")
     faction = ndb.StringProperty(indexed=False,choices=FACTIONS)
     opponents = ndb.KeyProperty(repeated=True)
     scorelist = ndb.IntegerProperty(repeated=True)
@@ -428,6 +430,11 @@ class AddPlayer(webapp2.RequestHandler):
             tournamentkey = ndb.Key(urlsafe=tournamentkeyurlstr)
             player = Player(parent=tournamentkey)
             player.name = self.request.get('name')
+            if Player.query(ancestor=tournamentkey).count() > 0:
+                player.number = max(player.number for player in Player.query(ancestor=tournamentkey).fetch(projection=[Player.number]))+1
+            else:
+                player.number = 1
+            player.note = self.request.get('notes')
             player.faction = self.request.get('faction')
             player.opponents = []
             player.put()

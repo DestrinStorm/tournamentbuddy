@@ -9,11 +9,6 @@ handlers:
   script: update_schema_handler.app  # path to webapp2 application definition.
   login: admin
   secure: always
-
-- url: /admin
-  script: admin.app  # path to webapp2 application definition.
-  login: admin
-  secure: always
   
 - url: /stylesheets
   static_dir: stylesheets

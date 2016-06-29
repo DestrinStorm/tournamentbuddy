@@ -38,6 +38,8 @@
         <tr>
             <th>Table</th>
             <th>Player A</th>
+            <th>A Score</th>
+            <th>B Score</th>
             <th>Player B</th>
             <th>Finished?</th>
         </tr>
@@ -49,6 +51,8 @@
             {% else %}
                 <td><label for="{{table.players[0].get().key.urlsafe()}}">
                     <input type="checkbox" name="ckb" id="{{table.players[0].urlsafe()}}" value="{{table.key.urlsafe()}}0" onclick="chkcontrol('{{table.players[0].urlsafe()}}')";>{{table.players[0].get().name}}</label></td>
+                <td align=center>{{table.players[0].get().score}}</td>
+                <td align=center>{{table.players[1].get().score}}</td>
                 <td><label for="{{table.players[1].get().key.urlsafe()}}">
                     {{table.players[1].get().name}}
                     <input type="checkbox" name="ckb" id="{{table.players[1].urlsafe()}}" value="{{table.key.urlsafe()}}1" onclick="chkcontrol('{{table.players[1].urlsafe()}}')";></label></td>
@@ -66,8 +70,10 @@
     <h2>Players: {{ tournament|getplayercount }}</h2>
     <table>
         <tr>
+            <th>#</th>
             <th>Player</th>
             <th>Faction</th>
+            <th>Note</th>
             <th>Score</th>
             <th>SoS</th>
             <th>CP</th>
@@ -75,8 +81,10 @@
         </tr>
         {% for player in players %}
         <tr>
+            <td>{{player.number}}</td>
             <td>{{player.name}}</td>
             <td>{{player.faction}}</td>
+            <td>{{player.note}}</td>
             <td align="center">{{player.score}}</td>
             <td align="center">{{player.sos}}</td>
             <td align="center">{{player.cp}}</td>
@@ -114,6 +122,7 @@
                 <option value="Trollbloods">Trollbloods</option>
                 <option value="Minions">Minions</option>
             </select>
+        Notes:<input type="text" name="notes">
       <input type="submit" value="Add">
         </fieldset>
     </form>
