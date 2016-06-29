@@ -13,5 +13,6 @@ class UpdateHandler(webapp2.RequestHandler):
         ndb.put_multi(put_queue)
         if more:
             iter_entities(cur)
+        self.response.out.write('Schema migration complete')
 
 app = webapp2.WSGIApplication([('/update_schema', UpdateHandler)])
