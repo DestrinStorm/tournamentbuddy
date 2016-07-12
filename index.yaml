@@ -13,6 +13,37 @@ indexes:
 - kind: Player
   ancestor: yes
   properties:
+  - name: dropped
+  - name: score
+    direction: desc
+  - name: sos
+    direction: desc
+  - name: cp
+    direction: desc
+  - name: pcdest
+    direction: desc
+  - name: number
+  - name: name
+
+- kind: Player
+  ancestor: yes
+  properties:
+  - name: dropped
+    direction: desc
+  - name: score
+    direction: desc
+  - name: sos
+    direction: desc
+  - name: cp
+    direction: desc
+  - name: pcdest
+    direction: desc
+  - name: number
+  - name: name
+
+- kind: Player
+  ancestor: yes
+  properties:
   - name: name
   - name: score
 
@@ -52,6 +83,35 @@ indexes:
     direction: desc
   - name: pcdest
     direction: desc
+  - name: dropped
+  - name: number
+  - name: name
+
+- kind: Player
+  ancestor: yes
+  properties:
+  - name: score
+    direction: desc
+  - name: sos
+    direction: desc
+  - name: cp
+    direction: desc
+  - name: pcdest
+    direction: desc
+  - name: name
+
+- kind: Player
+  ancestor: yes
+  properties:
+  - name: score
+    direction: desc
+  - name: sos
+    direction: desc
+  - name: cp
+    direction: desc
+  - name: pcdest
+    direction: desc
+  - name: number
   - name: name
 
 - kind: Table

@@ -47,7 +47,7 @@
         <tr>
             <td>{{table.number}}</td>
             {% if table.number == 0 %}
-                <td>{{table.players[0].get().name}}</td><td>Bye</td>
+                <td align=center>{{table.players[0].get().name}}</td><td align=center>Bye</td><td align=center>Bye</td><td align=center>Bye</td>
             {% else %}
                 <td><label for="{{table.players[0].get().key.urlsafe()}}">
                     <input type="checkbox" name="ckb" id="{{table.players[0].urlsafe()}}" value="{{table.key.urlsafe()}}0" onclick="chkcontrol('{{table.players[0].urlsafe()}}')";>{{table.players[0].get().name}}</label></td>
@@ -66,6 +66,8 @@
     </table>
     <input type="submit" id="seatswap" value="Swap player seating" style="visibility:hidden">
     </form>
+    {% if error=='SWAP' %}Couldn't swap seats, it would result in matching players that have already played each other
+      {% endif %}
     {% endif %}
     <h2>Players: {{ tournament|getplayercount }}</h2>
     <table>
@@ -89,7 +91,11 @@
             <td align="center">{{player.sos}}</td>
             <td align="center">{{player.cp}}</td>
             <td align="center">{{player.pcdest}}</td>
-            <td><a href="dropplayer?PKEY={{ player.key.urlsafe() }}&TKEY={{ tournament.key.urlsafe() }}">drop</td>
+            <td>{% if player.dropped == True %}
+                dropped</td>
+                {% else %}
+                <a href="dropplayer?PKEY={{ player.key.urlsafe() }}&TKEY={{ tournament.key.urlsafe() }}">drop</td>
+                {% endif %}
         </tr>
         {% endfor %}
       </table>

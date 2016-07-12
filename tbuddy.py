@@ -95,6 +95,7 @@ class Player(ndb.Model):
     sos = ndb.ComputedProperty(lambda self: sum(opponent.get().score for opponent in self.opponents))
     bye = ndb.BooleanProperty(default=False)
     pairedDown = ndb.BooleanProperty(default=False)
+    dropped = ndb.BooleanProperty(default=False)
 #END NDB data models
 
 class MainPage(webapp2.RequestHandler):
@@ -146,12 +147,13 @@ class RunTournament(webapp2.RequestHandler):
             identity = users.get_current_user().user_id()
             url = users.create_logout_url(self.request.uri)
             url_linktext = 'Logout'
+            error = self.request.get('ERR')
             tournamentkeyurlstr = self.request.get('TKEY')
             tournamentkey = ndb.Key(urlsafe=tournamentkeyurlstr)
             tournament = tournamentkey.get()
             tables = []
             thisround = []
-            players = Player.query(ancestor=tournament.key).order(-Player.score, -Player.sos, -Player.cp, -Player.pcdest, Player.name).fetch()
+            players = Player.query(ancestor=tournament.key).order(-Player.score, -Player.sos, -Player.cp, -Player.pcdest, Player.dropped,Player.number,Player.name).fetch()
             if tournament.currentround > 0:
                 getrounds = Round.query(ancestor=tournamentkey)
                 thisround = getrounds.filter(Round.number == tournament.currentround).get()
@@ -164,6 +166,7 @@ class RunTournament(webapp2.RequestHandler):
                 'thisround':thisround,
                 'url': url,
                 'url_linktext': url_linktext,
+                'error': error,
                 }
             template = JINJA_ENVIRONMENT.get_template('run.html')
             self.response.write(template.render(template_values))            
@@ -172,7 +175,6 @@ class DoPairings(webapp2.RequestHandler):
     def pairPlayers(self, p1key, p2key, openTable, roundkey):
         player1 = p1key.get()
         player2 = p2key.get()
-        logging.info("Pairing players %s and %s"%(player1.name, player2.name))
 
         player1.opponents.append(p2key)
         if player1.score > player2.score:
@@ -191,7 +193,6 @@ class DoPairings(webapp2.RequestHandler):
         
     def assignBye(self, p1key, roundkey):
         byeplayer = p1key.get()
-        logging.info( "%s got the bye"%byeplayer.name)
         table = Table(parent=roundkey)
         table.number = 0
         table.players = [p1key]
@@ -206,13 +207,12 @@ class DoPairings(webapp2.RequestHandler):
         table.put()
     
     def get(self):
-        logging.info("Starting the pairing process")
         tournamentkeyurlstr = self.request.get('TKEY')
         tournamentkey = ndb.Key(urlsafe=tournamentkeyurlstr)
         tournament = tournamentkey.get()
-        playerlist = Player.query(ancestor=tournamentkey).fetch()
+        #all players in this tournament that haven't dropped yet
+        playerlist = Player.query(Player.dropped == False, ancestor=tournamentkey).fetch()
         playerkeylist = []
-        logging.info(playerlist)
         #Generate the new round container
         thisround = Round(parent=tournamentkey)
         thisround.number = tournament.currentround + 1
@@ -245,14 +245,12 @@ class DoPairings(webapp2.RequestHandler):
             pointLists["%s_%s"%(player.score, countPoints[player.score])].append(player.key)
             #and the list of all playerkeys
             playerkeylist.append(player.key)
-        logging.info(pointLists)
         #Add all points in use to pointTotals
         for points in pointLists:
             pointTotals.append(points)
             
         #Sort our point groups based on points
         pointTotals.sort(reverse=True, key=lambda s: int(s.split('_')[0]))
-        logging.info( "Point totals after sorting high to low are: %s"%pointTotals)
         
         #Firstly lets deal with the bye situation
         #Do we have an uneven number of players involved?
@@ -261,20 +259,14 @@ class DoPairings(webapp2.RequestHandler):
             pointTotalsIndex = -1
             while pointTotalsIndex < 0:
                 playerkeysAtThisLevel = pointLists[pointTotals[pointTotalsIndex]]
-                logging.info(pointTotals[pointTotalsIndex])
-                logging.info(playerkeysAtThisLevel)
                 #sift out those who have already been byed
                 #copy for iteration
                 keysforiteration = playerkeysAtThisLevel
-                logging.info(keysforiteration)
                 for playerkey in keysforiteration:
                 #the fuck is going on in this loop?  It doesn't always run for every item in the iteration list
                     player = playerkey.get()
-                    logging.info(player)
                     if player.bye:
-                        logging.info("already had a bye, removing")
                         playerkeysAtThisLevel.remove(playerkey)
-                logging.info(playerkeysAtThisLevel)
                 #anyone left?
                 if len(playerkeysAtThisLevel) > 0:
                     #yep, pick someone
@@ -295,9 +287,6 @@ class DoPairings(webapp2.RequestHandler):
         bracketGraph = nx.Graph()
         bracketGraph.add_nodes_from(playerkeylist)
         
-        logging.info(playerkeylist)
-        logging.info(bracketGraph.nodes())
-
         #Create edges between all players in the graph who haven't already played
         #general approach: 2 tier matching graph, players with the same score are given tier 1 weighting (11-20)
         #players that differ by one scoring boundary have a tier 2 weighting (1-10)
@@ -330,14 +319,10 @@ class DoPairings(webapp2.RequestHandler):
         #maxcardinality ensures maximum matchups are generated, regardless of weighting
         pairings = nx.max_weight_matching(bracketGraph,maxcardinality=True)
 
-        logging.info(bracketGraph.edges(data= True))
-        logging.info(pairings)
 
         #Actually pair the players based on the matching we found
         for p in pairings:
-            logging.info(p)
             if p in playerkeylist:
-                logging.info(pointLists[points])
                 self.pairPlayers(p, pairings[p], openTable, roundkey)
                 openTable += 1
                 playerkeylist.remove(p)
@@ -443,12 +428,20 @@ class AddPlayer(webapp2.RequestHandler):
 class DropPlayer(webapp2.RequestHandler):
     def get(self):
         tournamentkeyurlstr = self.request.get('TKEY')
+        tournament = ndb.Key(urlsafe=tournamentkeyurlstr).get()
         playerkeyurlstr = self.request.get('PKEY')
         playerkey = ndb.Key(urlsafe=playerkeyurlstr)
         if users.get_current_user():
-            identity=users.get_current_user().user_id()
-            if identity == playerkey.parent().parent().id():
-                playerkey.delete()
+            if tournament.currentround == 0:
+                #No pairings yet, just delete them
+                identity=users.get_current_user().user_id()
+                if identity == playerkey.parent().parent().id():
+                    playerkey.delete()
+            else:
+                #tournament has started, mark as dropped and remove from future pairing processes
+                player = playerkey.get()
+                player.dropped = True
+                player.put()
         self.redirect('/run?TKEY='+tournamentkeyurlstr)
 
 class SwapPlayers(webapp2.RequestHandler):
@@ -461,7 +454,7 @@ class SwapPlayers(webapp2.RequestHandler):
                 #fetch the things
                 table0 = ndb.Key(urlsafe=swapees[0][:-1]).get()
                 table1 = ndb.Key(urlsafe=swapees[1][:-1]).get()
-                if table0 != table1: #not worth the hassle
+                if table0 != table1: #not worth the hassle otherwise
                     player0 = table0.players.pop(int(swapees[0][-1])).get()
                     affectedplayer0 = table0.players[0].get()
                     player0.opponents.remove(affectedplayer0.key)
@@ -470,22 +463,30 @@ class SwapPlayers(webapp2.RequestHandler):
                     affectedplayer1 = table1.players[0].get()
                     player1.opponents.remove(affectedplayer1.key)
                     affectedplayer1.opponents.remove(player1.key)
-                    #players 0 and 1 now free of their tables and removed from affected opponents list, pair them with new opponents
-                    player0.opponents.append(affectedplayer1.key)
-                    affectedplayer1.opponents.append(player0.key)
-                    player1.opponents.append(affectedplayer0.key)
-                    affectedplayer0.opponents.append(player1.key)
-                    #now seat them at the tables
-                    table0.players.append(player1.key)
-                    table1.players.append(player0.key)
-                    #all the puts
-                    player0.put()
-                    player1.put()
-                    table0.put()
-                    table1.put()
-                    affectedplayer0.put()
-                    affectedplayer1.put()            
-        self.redirect('/run?TKEY='+tournamentkeyurlstr)
+                    #players 0 and 1 now free of their tables and removed from affected opponents list
+                    #check player0 has not played affectedplayer1 and
+                    #player1 has not played affectedplayer0
+                    if (player0.key not in affectedplayer1.opponents) and (player1.key not in affectedplayer0.opponents):
+                        #okay, pair them with new opponents
+                        player0.opponents.append(affectedplayer1.key)
+                        affectedplayer1.opponents.append(player0.key)
+                        player1.opponents.append(affectedplayer0.key)
+                        affectedplayer0.opponents.append(player1.key)
+                        #now seat them at the tables
+                        table0.players.append(player1.key)
+                        table1.players.append(player0.key)
+                        #all the puts
+                        player0.put()
+                        player1.put()
+                        table0.put()
+                        table1.put()
+                        affectedplayer0.put()
+                        affectedplayer1.put()
+                        err = 'NOPE'
+                    else:
+                        #ABORT
+                        err = 'SWAP'
+        self.redirect('/run?TKEY='+tournamentkeyurlstr+'&ERR='+err)
         
 app = webapp2.WSGIApplication([
     ('/', MainPage),
