@@ -456,36 +456,73 @@ class SwapPlayers(webapp2.RequestHandler):
                 table1 = ndb.Key(urlsafe=swapees[1][:-1]).get()
                 if table0 != table1: #not worth the hassle otherwise
                     player0 = table0.players.pop(int(swapees[0][-1])).get()
-                    affectedplayer0 = table0.players[0].get()
-                    player0.opponents.remove(affectedplayer0.key)
-                    affectedplayer0.opponents.remove(player0.key)
-                    player1 = table1.players.pop(int(swapees[1][-1])).get()
-                    affectedplayer1 = table1.players[0].get()
-                    player1.opponents.remove(affectedplayer1.key)
-                    affectedplayer1.opponents.remove(player1.key)
-                    #players 0 and 1 now free of their tables and removed from affected opponents list
-                    #check player0 has not played affectedplayer1 and
-                    #player1 has not played affectedplayer0
-                    if (player0.key not in affectedplayer1.opponents) and (player1.key not in affectedplayer0.opponents):
-                        #okay, pair them with new opponents
-                        player0.opponents.append(affectedplayer1.key)
-                        affectedplayer1.opponents.append(player0.key)
-                        player1.opponents.append(affectedplayer0.key)
-                        affectedplayer0.opponents.append(player1.key)
-                        #now seat them at the tables
-                        table0.players.append(player1.key)
-                        table1.players.append(player0.key)
-                        #all the puts
-                        player0.put()
-                        player1.put()
-                        table0.put()
-                        table1.put()
-                        affectedplayer0.put()
-                        affectedplayer1.put()
-                        err = 'NOPE'
+                    if len(table0.players) == 0:
+                        #we're trying to swap into the bye table, so handle that specially
+                        #first let's remove the bye status from player0
+                        player0.scorelist.pop()
+                        player0.cplist.pop()
+                        player0.pcdestlist.pop()
+                        player0.bye = False
+                        #now fetch the others
+                        player1 = table1.players.pop(int(swapees[1][-1])).get()
+                        affectedplayer1 = table1.players[0].get()
+                        player1.opponents.remove(affectedplayer1.key)
+                        affectedplayer1.opponents.remove(player1.key)
+                        if (player0.key not in affectedplayer1.opponents):
+                            #okay, pair them with new opponents
+                            player0.opponents.append(affectedplayer1.key)
+                            affectedplayer1.opponents.append(player0.key)
+                            #award player1 the bye
+                            player1.scorelist.append(1)
+                            player1.cplist.append(3)
+                            tournament = player0.key.parent().get()
+                            player1.pcdestlist.append(int(math.ceil(tournament.pointsize/2.0)))
+                            player1.bye = True
+                            #now seat them at the tables
+                            table0.players.append(player1.key)
+                            table1.players.append(player0.key)
+                            #all the puts
+                            player0.put()
+                            player1.put()
+                            table0.put()
+                            table1.put()
+                            affectedplayer1.put()
+                            err = 'NOPE'
+                        else:
+                            #ABORT
+                            err = 'SWAP'
                     else:
-                        #ABORT
-                        err = 'SWAP'
+                        #no bye involved
+                        affectedplayer0 = table0.players[0].get()
+                        player0.opponents.remove(affectedplayer0.key)
+                        affectedplayer0.opponents.remove(player0.key)
+                        player1 = table1.players.pop(int(swapees[1][-1])).get()
+                        affectedplayer1 = table1.players[0].get()
+                        player1.opponents.remove(affectedplayer1.key)
+                        affectedplayer1.opponents.remove(player1.key)
+                        #players 0 and 1 now free of their tables and removed from affected opponents list
+                        #check player0 has not played affectedplayer1 and
+                        #player1 has not played affectedplayer0
+                        if (player0.key not in affectedplayer1.opponents) and (player1.key not in affectedplayer0.opponents):
+                            #okay, pair them with new opponents
+                            player0.opponents.append(affectedplayer1.key)
+                            affectedplayer1.opponents.append(player0.key)
+                            player1.opponents.append(affectedplayer0.key)
+                            affectedplayer0.opponents.append(player1.key)
+                            #now seat them at the tables
+                            table0.players.append(player1.key)
+                            table1.players.append(player0.key)
+                            #all the puts
+                            player0.put()
+                            player1.put()
+                            table0.put()
+                            table1.put()
+                            affectedplayer0.put()
+                            affectedplayer1.put()
+                            err = 'NOPE'
+                        else:
+                            #ABORT
+                            err = 'SWAP'
         self.redirect('/run?TKEY='+tournamentkeyurlstr+'&ERR='+err)
         
 app = webapp2.WSGIApplication([
