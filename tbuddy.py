@@ -210,127 +210,135 @@ class DoPairings(webapp2.RequestHandler):
         tournamentkeyurlstr = self.request.get('TKEY')
         tournamentkey = ndb.Key(urlsafe=tournamentkeyurlstr)
         tournament = tournamentkey.get()
-        #all players in this tournament that haven't dropped yet
-        playerlist = Player.query(Player.dropped == False, ancestor=tournamentkey).fetch()
-        playerkeylist = []
-        #Generate the new round container
-        thisround = Round(parent=tournamentkey)
-        thisround.number = tournament.currentround + 1
-        #Random round timer adjustment removed in SR2016
-        thisround.length = ROUND_LENGTHS[tournament.pointsize]# + random.choice([5,10,15,-5,-10,-15])
-        thisround.scenario = random.choice(SCENARIOS)
-        roundkey = thisround.put()
-        #INITILISATION
-        startingTable = 1
-        openTable = startingTable
-        #Contains lists of players sorted by how many points they currently have
-        pointLists = {}
-        #Contains a list of points in the event from high to low
-        pointTotals = []
-        #Counts our groupings for each point amount
-        countPoints = {}
-        #Add all players to pointLists
-        for player in playerlist:
-            #If this point amount isn't in the list, add it
-            if "%s_1"%player.score not in pointLists:
-                pointLists["%s_1"%player.score] = []
-                countPoints[player.score] = 1
-            
-            #Breaks the players into groups of their current points up to the max group allowed.
-            #Smaller groups mean faster calculations
-            if len(pointLists["%s_%s"%(player.score, countPoints[player.score])]) > MAXGROUP:
-                countPoints[player.score] += 1
-                pointLists["%s_%s"%(player.score, countPoints[player.score])] = []
-            #Add the NDB key of our player to the correct group
-            pointLists["%s_%s"%(player.score, countPoints[player.score])].append(player.key)
-            #and the list of all playerkeys
-            playerkeylist.append(player.key)
-        #Add all points in use to pointTotals
-        for points in pointLists:
-            pointTotals.append(points)
-            
-        #Sort our point groups based on points
-        pointTotals.sort(reverse=True, key=lambda s: int(s.split('_')[0]))
-        
-        #Firstly lets deal with the bye situation
-        #Do we have an uneven number of players involved?
-        if len(playerlist) % 2 > 0:
-            #yep, find the lowest scored player who hasn't yet been byed
-            pointTotalsIndex = -1
-            while pointTotalsIndex < 0:
-                playerkeysAtThisLevel = pointLists[pointTotals[pointTotalsIndex]]
-                #sift out those who have already been byed
-                #copy for iteration
-                keysforiteration = playerkeysAtThisLevel
-                for playerkey in keysforiteration:
-                #the fuck is going on in this loop?  It doesn't always run for every item in the iteration list
-                    player = playerkey.get()
-                    if player.bye:
-                        playerkeysAtThisLevel.remove(playerkey)
-                #anyone left?
-                if len(playerkeysAtThisLevel) > 0:
-                    #yep, pick someone
-                    byePlayerkey = random.choice(playerkeysAtThisLevel)
-                    #remove them from the pointslist so we don't try and pair them again
-                    pointLists[pointTotals[pointTotalsIndex]].remove(byePlayerkey)
-                    playerkeylist.remove(byePlayerkey)
-                    #log it
-                    self.assignBye(byePlayerkey, roundkey)
-                    #set our index so we can escape
-                    pointTotalsIndex = 0
-                else:
-                    #nope, move up the scorechart
-                    pointTotalsIndex -= 1
-        
-        #That's the bye dealt with, pair everyone else
-        #Create the graph object and add all players to it
-        bracketGraph = nx.Graph()
-        bracketGraph.add_nodes_from(playerkeylist)
-        
-        #Create edges between all players in the graph who haven't already played
-        #general approach: 2 tier matching graph, players with the same score are given tier 1 weighting (11-20)
-        #players that differ by one scoring boundary have a tier 2 weighting (1-10)
-        #then run an optimised weight match algorithm to generate pairings
-        for playerkey,opponentkey in it.combinations(bracketGraph.nodes(),2):
-            player = playerkey.get()
-            if opponentkey not in player.opponents:
-                #these two haven't played yet
-                opponent = opponentkey.get()
-                #Are these players at the same points level?
-                if player.score == opponent.score:
-                    #sure are, weight these two as 'tier 1' match
-                    wgt = random.randint(11, 20)
-                #Are they within one score bracket of each other?
-                elif abs(pointTotals.index("%s_1"%player.score) - pointTotals.index("%s_1"%opponent.score)) < 2:
-                    #yep, maybe, check higher score person hasn't been paired down already then assign tier 2 match
-                    if player.score > opponent.score:
-                        if not(player.pairedDown):
-                            wgt = random.randint(1, 10)
+        #Paranoia, check we're either in round 0 or all tables are finished
+        err = ''
+        if tournament.currentround > 0:
+            getrounds = Round.query(ancestor=tournamentkey)
+            thisround = getrounds.filter(Round.number == tournament.currentround).get()
+            if not(isFinished(thisround)):
+                err = 'NOTOVER'
+        if err == '': #safe to proceed
+            #all players in this tournament that haven't dropped yet
+            playerlist = Player.query(Player.dropped == False, ancestor=tournamentkey).fetch()
+            playerkeylist = []
+            #Generate the new round container
+            thisround = Round(parent=tournamentkey)
+            thisround.number = tournament.currentround + 1
+            #Random round timer adjustment removed in SR2016
+            thisround.length = ROUND_LENGTHS[tournament.pointsize]# + random.choice([5,10,15,-5,-10,-15])
+            thisround.scenario = random.choice(SCENARIOS)
+            roundkey = thisround.put()
+            #INITILISATION
+            startingTable = 1
+            openTable = startingTable
+            #Contains lists of players sorted by how many points they currently have
+            pointLists = {}
+            #Contains a list of points in the event from high to low
+            pointTotals = []
+            #Counts our groupings for each point amount
+            countPoints = {}
+            #Add all players to pointLists
+            for player in playerlist:
+                #If this point amount isn't in the list, add it
+                if "%s_1"%player.score not in pointLists:
+                    pointLists["%s_1"%player.score] = []
+                    countPoints[player.score] = 1
+
+                #Breaks the players into groups of their current points up to the max group allowed.
+                #Smaller groups mean faster calculations
+                if len(pointLists["%s_%s"%(player.score, countPoints[player.score])]) > MAXGROUP:
+                    countPoints[player.score] += 1
+                    pointLists["%s_%s"%(player.score, countPoints[player.score])] = []
+                #Add the NDB key of our player to the correct group
+                pointLists["%s_%s"%(player.score, countPoints[player.score])].append(player.key)
+                #and the list of all playerkeys
+                playerkeylist.append(player.key)
+            #Add all points in use to pointTotals
+            for points in pointLists:
+                pointTotals.append(points)
+
+            #Sort our point groups based on points
+            pointTotals.sort(reverse=True, key=lambda s: int(s.split('_')[0]))
+
+            #Firstly lets deal with the bye situation
+            #Do we have an uneven number of players involved?
+            if len(playerlist) % 2 > 0:
+                #yep, find the lowest scored player who hasn't yet been byed
+                pointTotalsIndex = -1
+                while pointTotalsIndex < 0:
+                    playerkeysAtThisLevel = pointLists[pointTotals[pointTotalsIndex]]
+                    #sift out those who have already been byed
+                    #copy for iteration
+                    keysforiteration = playerkeysAtThisLevel
+                    for playerkey in keysforiteration:
+                    #the fuck is going on in this loop?  It doesn't always run for every item in the iteration list
+                        player = playerkey.get()
+                        if player.bye:
+                            playerkeysAtThisLevel.remove(playerkey)
+                    #anyone left?
+                    if len(playerkeysAtThisLevel) > 0:
+                        #yep, pick someone
+                        byePlayerkey = random.choice(playerkeysAtThisLevel)
+                        #remove them from the pointslist so we don't try and pair them again
+                        pointLists[pointTotals[pointTotalsIndex]].remove(byePlayerkey)
+                        playerkeylist.remove(byePlayerkey)
+                        #log it
+                        self.assignBye(byePlayerkey, roundkey)
+                        #set our index so we can escape
+                        pointTotalsIndex = 0
                     else:
-                        if not(opponent.pairedDown):
-                            wgt = random.randint(1, 10)
-                else:
-                    #these guys are too far apart to be paired
-                    wgt = -1
-                #Create edge
-                bracketGraph.add_edge(playerkey, opponentkey, weight=wgt)
+                        #nope, move up the scorechart
+                        pointTotalsIndex -= 1
 
-        #Generate pairings from the created graph
-        #maxcardinality ensures maximum matchups are generated, regardless of weighting
-        pairings = nx.max_weight_matching(bracketGraph,maxcardinality=True)
+            #That's the bye dealt with, pair everyone else
+            #Create the graph object and add all players to it
+            bracketGraph = nx.Graph()
+            bracketGraph.add_nodes_from(playerkeylist)
+
+            #Create edges between all players in the graph who haven't already played
+            #general approach: 2 tier matching graph, players with the same score are given tier 1 weighting (11-20)
+            #players that differ by one scoring boundary have a tier 2 weighting (1-10)
+            #then run an optimised weight match algorithm to generate pairings
+            for playerkey,opponentkey in it.combinations(bracketGraph.nodes(),2):
+                player = playerkey.get()
+                if opponentkey not in player.opponents:
+                    #these two haven't played yet
+                    opponent = opponentkey.get()
+                    #Are these players at the same points level?
+                    if player.score == opponent.score:
+                        #sure are, weight these two as 'tier 1' match
+                        wgt = random.randint(11, 20)
+                    #Are they within one score bracket of each other?
+                    elif abs(pointTotals.index("%s_1"%player.score) - pointTotals.index("%s_1"%opponent.score)) < 2:
+                        #yep, maybe, check higher score person hasn't been paired down already then assign tier 2 match
+                        if player.score > opponent.score:
+                            if not(player.pairedDown):
+                                wgt = random.randint(1, 10)
+                        else:
+                            if not(opponent.pairedDown):
+                                wgt = random.randint(1, 10)
+                    else:
+                        #these guys are too far apart to be paired
+                        wgt = -1
+                    #Create edge
+                    bracketGraph.add_edge(playerkey, opponentkey, weight=wgt)
+
+            #Generate pairings from the created graph
+            #maxcardinality ensures maximum matchups are generated, regardless of weighting
+            pairings = nx.max_weight_matching(bracketGraph,maxcardinality=True)
 
 
-        #Actually pair the players based on the matching we found
-        for p in pairings:
-            if p in playerkeylist:
-                self.pairPlayers(p, pairings[p], openTable, roundkey)
-                openTable += 1
-                playerkeylist.remove(p)
-                playerkeylist.remove(pairings[p])
+            #Actually pair the players based on the matching we found
+            for p in pairings:
+                if p in playerkeylist:
+                    self.pairPlayers(p, pairings[p], openTable, roundkey)
+                    openTable += 1
+                    playerkeylist.remove(p)
+                    playerkeylist.remove(pairings[p])
 
-        tournament.currentround = thisround.number
-        tournament.put()
-        self.redirect('/run?TKEY='+tournamentkeyurlstr)
+            tournament.currentround = thisround.number
+            tournament.put()
+        self.redirect('/run?TKEY='+tournamentkeyurlstr+'&ERR='+err)
 
 class Results(webapp2.RequestHandler):
     def get(self):
@@ -378,16 +386,15 @@ class ResultsSubmit(webapp2.RequestHandler):
                         players[x].scorelist[thisround.number-1] = 1
                     else:
                         players[x].scorelist[thisround.number-1] = 0
-                    players[x].cplist[thisround.number-1] = (int(cps[x]))
-                    players[x].pcdestlist[thisround.number-1] = (int(pcdest[x]))
+                    players[x].cplist[thisround.number-1] = (int(cps[x] or 0))
+                    players[x].pcdestlist[thisround.number-1] = (int(pcdest[x]or 0))
                 else:
                     if players[x].key.urlsafe() == winnerkeyurlstr:
                         players[x].scorelist.append(1)
                     else:
                         players[x].scorelist.append(0)
-                    players[x].cplist.append(int(cps[x]))
-                    players[x].pcdestlist.append(int(pcdest[x]))
-                #TODO: Calculate SOS
+                    players[x].cplist.append(int(cps[x] or 0))
+                    players[x].pcdestlist.append(int(pcdest[x] or 0))
                 players[x].put()
             #Mark the table as finished
             table.finished = True

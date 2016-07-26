@@ -19,9 +19,9 @@
         {% for player in players %}
         <tr>
             <td>{{player.name}}</td>
-            <td align="center"><input type="radio" name="win" value="{{player.key.urlsafe()}}"{% if player.scorelist[thisround.number-1] == 1 %}checked{% endif %}></td>
-            <td align="center"><input type="number" name="cps" style="width: 40px;" value="{{player.cplist[thisround.number-1]}}" required/></td>
-            <td align="center"><input type="number" name="pcdest" style="width: 40px;" value="{{player.pcdestlist[thisround.number-1]}}" required/></td>
+            <td align="center"><input type="radio" name="win" value="{{player.key.urlsafe()}}"{% if player.scorelist[thisround.number-1] == 1 %}checked{% endif %} required></td>
+            <td align="center"><input type="number" name="cps" style="width: 40px;" value="{{player.cplist[thisround.number-1]}}"/></td>
+            <td align="center"><input type="number" name="pcdest" style="width: 40px;" value="{{player.pcdestlist[thisround.number-1]}}"/></td>
         </tr>
         {% endfor %}
     </table>
