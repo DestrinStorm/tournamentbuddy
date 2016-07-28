@@ -73,6 +73,8 @@
     <input type="submit" id="seatswap" value="Swap player seating" style="visibility:hidden">
     </form>
     {% if error=='SWAP' %}Couldn't swap seats, it would result in matching players that have already played each other
+    {% elif error=='BYESWAP' %}You tried to put a player who has already had a bye into the bye seat
+    {% elif error=='NOTOVER' %}You tried to generate pairings before the current round is over, stop that
       {% endif %}
     {% endif %}
     <h2>Players: {{ tournament|getplayercount }}</h2>

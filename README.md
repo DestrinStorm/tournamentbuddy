@@ -3,7 +3,7 @@ Tournament management software for a variety of tabletop gaming systems
 Hosted on Google App Engine running in Python
 
 TODO list:
-fix 'paired down' flag for manual swaps
+fix 'paired down' flag for manual swaps - made a start - Bye table swaps check for this
 Manual repairing should check they aren't playing on a previous table
 Round timings for non timed turns
 

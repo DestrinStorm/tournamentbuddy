@@ -465,39 +465,60 @@ class SwapPlayers(webapp2.RequestHandler):
                     player0 = table0.players.pop(int(swapees[0][-1])).get()
                     if len(table0.players) == 0:
                         #we're trying to swap into the bye table, so handle that specially
-                        #first let's remove the bye status from player0
-                        player0.scorelist.pop()
-                        player0.cplist.pop()
-                        player0.pcdestlist.pop()
-                        player0.bye = False
-                        #now fetch the others
+                        #Let's just make sure we aren't swapping another bye player in
                         player1 = table1.players.pop(int(swapees[1][-1])).get()
-                        affectedplayer1 = table1.players[0].get()
-                        player1.opponents.remove(affectedplayer1.key)
-                        affectedplayer1.opponents.remove(player1.key)
-                        if (player0.key not in affectedplayer1.opponents):
-                            #okay, pair them with new opponents
-                            player0.opponents.append(affectedplayer1.key)
-                            affectedplayer1.opponents.append(player0.key)
-                            #award player1 the bye
-                            player1.scorelist.append(1)
-                            player1.cplist.append(3)
-                            tournament = player0.key.parent().get()
-                            player1.pcdestlist.append(int(math.ceil(tournament.pointsize/2.0)))
-                            player1.bye = True
-                            #now seat them at the tables
-                            table0.players.append(player1.key)
-                            table1.players.append(player0.key)
-                            #all the puts
-                            player0.put()
-                            player1.put()
-                            table0.put()
-                            table1.put()
-                            affectedplayer1.put()
-                            err = 'NOPE'
+                        logging.info(player1.name)
+                        logging.info(player1.bye)
+                        if not player1.bye:
+                            #first let's remove the bye status from player0
+                            player0.scorelist.pop()
+                            player0.cplist.pop()
+                            player0.pcdestlist.pop()
+                            player0.bye = False
+                            #now fetch the others
+                            affectedplayer1 = table1.players[0].get()
+                            player1.opponents.remove(affectedplayer1.key)
+                            affectedplayer1.opponents.remove(player1.key)
+                            #already played check?
+                            if (player0.key not in affectedplayer1.opponents):
+                                #paired down check?
+                                if not player0.pairedDown:
+                                    #Bye player hasn't been paired down already, no issues with the swap
+                                    #was anyone paired down before and needs to be changed?
+                                    if player1.score > affectedplayer1.score:
+                                        player1.pairedDown = False
+                                    elif affectedplayer1.score > player1.score:
+                                        affectedplayer1.pairedDown = False
+                                    #okay, pair them with new opponents
+                                    player0.opponents.append(affectedplayer1.key)
+                                    affectedplayer1.opponents.append(player0.key)
+                                    #award player1 the bye
+                                    player1.scorelist.append(1)
+                                    player1.cplist.append(3)
+                                    tournament = player0.key.parent().get()
+                                    player1.pcdestlist.append(int(math.ceil(tournament.pointsize/2.0)))
+                                    player1.bye = True
+                                    #is anyone in a paired down position now?
+                                    if player0.score > affectedplayer1.score:
+                                        player0.pairedDown = True
+                                    elif affectedplayer1.score > player0.score:
+                                        affectedplayer1.pairedDown = True
+                                    #now seat them at the tables
+                                    table0.players.append(player1.key)
+                                    table1.players.append(player0.key)
+                                    #all the puts
+                                    player0.put()
+                                    player1.put()
+                                    table0.put()
+                                    table1.put()
+                                    affectedplayer1.put()
+                                    err = 'NOPE'
+                                #else but what if the bye player HAS been paired down already??
+                            else:
+                            #abort
+                                err = 'SWAP'
                         else:
-                            #ABORT
-                            err = 'SWAP'
+                            err = 'BYESWAP'
                     else:
                         #no bye involved
                         affectedplayer0 = table0.players[0].get()
