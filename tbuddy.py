@@ -467,8 +467,6 @@ class SwapPlayers(webapp2.RequestHandler):
                         #we're trying to swap into the bye table, so handle that specially
                         #Let's just make sure we aren't swapping another bye player in
                         player1 = table1.players.pop(int(swapees[1][-1])).get()
-                        logging.info(player1.name)
-                        logging.info(player1.bye)
                         if not player1.bye:
                             #first let's remove the bye status from player0
                             player0.scorelist.pop()
@@ -540,6 +538,37 @@ class SwapPlayers(webapp2.RequestHandler):
                             #now seat them at the tables
                             table0.players.append(player1.key)
                             table1.players.append(player0.key)
+                            #Need to check if this affected pairdown status
+                            table0score = (player0.score - affectedplayer0.score)
+                            table1score = (player1.score - affectedplayer1.score)
+                            if table0score > 0:
+                                #player0 was paired down before, are they still?
+                                if not player0.score > affectedplayer1.score:
+                                    player0.pairedDown = False
+                            elif table0score < 0:
+                                #affectedplayer0 was paired down before, are they still?
+                                if not affectedplayer0.score > player1.score:
+                                    affectedplayer0.pairedDown = False
+                            elif table0score == 0:
+                                #no one was paired down, are they about to be?
+                                if player0.score > affectedplayer1.score:
+                                    player0.pairedDown = True
+                                if affectedplayer0.score > player1.score:
+                                    affectedplayer0.pairedDown = True
+                            if table1score > 0:
+                                #player1 was paired down before, are they still?
+                                if not player1.score > affectedplayer0.score:
+                                    player1.pairedDown = False
+                            elif table1score < 0:
+                                #affectedplayer1 was paired down before, are they still?
+                                if not affectedplayer1.score > player0.score:
+                                    affectedplayer1.pairedDown = False
+                            elif table1score == 0:
+                                #no one was paired down before? are they about to be?
+                                if player1.score > affectedplayer0.score:
+                                    player1.pairedDown = True
+                                if affectedplayer1.score > player0.score:
+                                    affectedplayer1.pairedDown = True
                             #all the puts
                             player0.put()
                             player1.put()

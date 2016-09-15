@@ -74,6 +74,7 @@
     </form>
     {% if error=='SWAP' %}Couldn't swap seats, it would result in matching players that have already played each other
     {% elif error=='BYESWAP' %}You tried to put a player who has already had a bye into the bye seat
+    {% elif error=='PAIRDOWNSWAP' %}You tried to put a player who has already been paired down into another paired down seat
     {% elif error=='NOTOVER' %}You tried to generate pairings before the current round is over, stop that
       {% endif %}
     {% endif %}
@@ -88,6 +89,7 @@
             <th>SoS</th>
             <th>CP</th>
             <th>PC Destroyed</th>
+            <th>Paired Down?</th>
         </tr>
         {% for player in players %}
         <tr>
@@ -99,6 +101,7 @@
             <td align="center">{{player.sos}}</td>
             <td align="center">{{player.cp}}</td>
             <td align="center">{{player.pcdest}}</td>
+            <td align="center">{{player.pairedDown}}</td>
             <td>{% if player.dropped == True %}
                 dropped</td>
                 {% else %}
