@@ -314,9 +314,15 @@ class DoPairings(webapp2.RequestHandler):
                         if player.score > opponent.score:
                             if not(player.pairedDown):
                                 wgt = random.randint(1, 10)
+                            else:
+                                #cannot match, one of these guys has been paired down
+                                wgt = -1
                         else:
                             if not(opponent.pairedDown):
                                 wgt = random.randint(1, 10)
+                            else:
+                                #cannot match, one of these guys has been paired down
+                                wgt = -1
                     else:
                         #these guys are too far apart to be paired
                         wgt = -1

@@ -3,6 +3,9 @@ Tournament management software for a variety of tabletop gaming systems
 Hosted on Google App Engine running in Python
 
 TODO list:
+Look at storage, can we have a way of moving tournaments?
+Add players after it starts?  Or at least a way of deleting rounds
+Add a sort to the table list to order by 'matches won' tables (2 score, 1 score etc)
 Manual repairing should check they aren't playing on a previous table
 Round timings for non timed turns
 
