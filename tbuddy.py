@@ -53,6 +53,21 @@ def user_key(user_id):
     """Constructs a Datastore key for a user entity."""
     return ndb.Key('User', user_id)
 
+def assignBye(p1key, roundkey):
+    byeplayer = p1key.get()
+    table = Table(parent=roundkey)
+    table.number = 0
+    table.players = [p1key]
+    #Grant the player bye scores for round 1
+    byeplayer.scorelist.append(1)
+    byeplayer.cplist.append(3)
+    tournament = roundkey.parent().get()
+    byeplayer.pcdestlist.append(int(math.ceil(tournament.pointsize/2.0)))
+    byeplayer.bye = True
+    byeplayer.put()
+    table.finished = True
+    table.put()
+
 ROUND_LENGTHS = {0:30,25:50,50:70,75:100,100:120,150:150,200:200}
 SCENARIOS = ['Entrenched','Line Breaker','Take and Hold','The Pit','Extraction','Incursion','Outlast','Recon']
 FACTIONS = ['Cryx','Cygnar','Khador','Protectorate of Menoth','Retribution of Scyrah','Convergence of Cyriss','Mercenaries','Circle Orboros','Legion of Everblight','Skorne','Trollbloods','Minions']
@@ -190,21 +205,6 @@ class DoPairings(webapp2.RequestHandler):
         table.number = openTable
         table.players = [p1key,p2key]
         table.put()
-        
-    def assignBye(self, p1key, roundkey):
-        byeplayer = p1key.get()
-        table = Table(parent=roundkey)
-        table.number = 0
-        table.players = [p1key]
-        #Grant the player bye scores for round 1
-        byeplayer.scorelist.append(1)
-        byeplayer.cplist.append(3)
-        tournament = roundkey.parent().get()
-        byeplayer.pcdestlist.append(int(math.ceil(tournament.pointsize/2.0)))
-        byeplayer.bye = True
-        byeplayer.put()
-        table.finished = True
-        table.put()
     
     def get(self):
         tournamentkeyurlstr = self.request.get('TKEY')
@@ -283,7 +283,7 @@ class DoPairings(webapp2.RequestHandler):
                         pointLists[pointTotals[pointTotalsIndex]].remove(byePlayerkey)
                         playerkeylist.remove(byePlayerkey)
                         #log it
-                        self.assignBye(byePlayerkey, roundkey)
+                        assignBye(byePlayerkey, roundkey)
                         #set our index so we can escape
                         pointTotalsIndex = 0
                     else:
@@ -332,7 +332,6 @@ class DoPairings(webapp2.RequestHandler):
             #Generate pairings from the created graph
             #maxcardinality ensures maximum matchups are generated, regardless of weighting
             pairings = nx.max_weight_matching(bracketGraph,maxcardinality=True)
-
 
             #Actually pair the players based on the matching we found
             for p in pairings:
@@ -435,7 +434,37 @@ class AddPlayer(webapp2.RequestHandler):
             player.note = self.request.get('notes')
             player.faction = self.request.get('faction')
             player.opponents = []
-            player.put()
+            playerkey = player.put()
+            tournament = tournamentkey.get()
+            if tournament.currentround > 0:
+                #late joiner, work out what to do with them
+                getrounds = Round.query(ancestor=tournamentkey)
+                thisroundkey = getrounds.filter(Round.number == tournament.currentround).get().key
+                if Player.query(ancestor=tournamentkey).count() % 2 == 1:
+                    #odd numbers, this person is going into a bye seat
+                    assignBye(playerkey, thisroundkey)
+                else:
+                    #There is someone in the bye set already, match this person with them
+                    #aight, who is in the bye seat
+                    gettables = Table.query(ancestor=thisroundkey)
+                    byetable = gettables.filter(Table.number == 0).get()
+                    byeplayer = byetable.players.pop().get()
+                    #blow the table up
+                    byetable.key.delete()
+                    #let's remove the bye status from that person
+                    byeplayer.scorelist.pop()
+                    byeplayer.cplist.pop()
+                    byeplayer.pcdestlist.pop()
+                    byeplayer.bye = False
+                    #cool, add the new opponent, find a new table
+                    byeplayer.opponents.append(playerkey)
+                    byeplayer.put()
+                    player.opponents.append(byeplayer.key)
+                    player.put()
+                    table = Table(parent=thisroundkey)
+                    table.number = gettables.count()
+                    table.players = [byeplayer.key,playerkey]
+                    table.put()
         self.redirect('/run?TKEY='+tournamentkeyurlstr)
         
 class DropPlayer(webapp2.RequestHandler):

@@ -122,7 +122,7 @@
     {% else %}
     Please enter remaining results for this round
     {% endif %}
-    {% if tournament.currentround == 0 %}
+    {% if tournament.currentround < 2 %}
     <form action="/addplayer?" method="get">
     <input type="hidden" name="TKEY" value="{{ tournament.key.urlsafe() }}">
     <fieldset>
